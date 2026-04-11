@@ -29,9 +29,25 @@ async function acquireStream(deviceId: string | undefined): Promise<MediaStream>
 
 export function WebcamPreviewWindow() {
 	const videoRef = useRef<HTMLVideoElement>(null);
+	const dragStateRef = useRef<{
+		startWinX: number;
+		startWinY: number;
+		startMouseX: number;
+		startMouseY: number;
+	} | null>(null);
 	const [deviceId, setDeviceId] = useState<string | undefined>(() => getDeviceIdFromQuery());
 	const [streamState, setStreamState] = useState<StreamState>({ kind: "idle" });
 	const { shape, setShape } = useWebcamShape();
+
+	const handleDragStart = (event: React.MouseEvent<HTMLDivElement>) => {
+		if (event.button !== 0) return;
+		dragStateRef.current = {
+			startWinX: window.screenX,
+			startWinY: window.screenY,
+			startMouseX: event.screenX,
+			startMouseY: event.screenY,
+		};
+	};
 
 	useEffect(() => {
 		let cancelled = false;
@@ -97,16 +113,36 @@ export function WebcamPreviewWindow() {
 		api.setWebcamPreviewAspect(ratio);
 	}, [shape, streamState]);
 
+	useEffect(() => {
+		const handleMouseMove = (event: MouseEvent) => {
+			const drag = dragStateRef.current;
+			if (!drag) return;
+			const dx = event.screenX - drag.startMouseX;
+			const dy = event.screenY - drag.startMouseY;
+			window.electronAPI?.setWebcamPreviewPosition(drag.startWinX + dx, drag.startWinY + dy);
+		};
+		const handleMouseUp = () => {
+			dragStateRef.current = null;
+		};
+		window.addEventListener("mousemove", handleMouseMove);
+		window.addEventListener("mouseup", handleMouseUp);
+		return () => {
+			window.removeEventListener("mousemove", handleMouseMove);
+			window.removeEventListener("mouseup", handleMouseUp);
+		};
+	}, []);
+
 	const clipPath = getCssClipPath(shape) ?? "none";
 
 	return (
 		<div className="group relative h-screen w-screen overflow-hidden bg-transparent">
 			<div
 				className={cn(
-					"absolute inset-0 overflow-hidden bg-black",
+					"absolute inset-0 overflow-hidden bg-black cursor-move",
 					shape === "circle" && "rounded-full",
 				)}
-				style={{ clipPath, WebkitAppRegion: "drag" } as React.CSSProperties}
+				style={{ clipPath }}
+				onMouseDown={handleDragStart}
 			>
 				{streamState.kind === "ready" && (
 					<video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" />

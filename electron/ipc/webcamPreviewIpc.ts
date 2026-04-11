@@ -86,4 +86,12 @@ export function registerWebcamPreviewLifecycleIpc(options: {
 		const win = getWebcamPreviewWindow();
 		if (win && !win.isDestroyed()) win.close();
 	});
+
+	ipcMain.on("webcam-preview:set-position", (_event, x: unknown, y: unknown) => {
+		const win = getWebcamPreviewWindow();
+		if (!win || win.isDestroyed()) return;
+		if (typeof x !== "number" || typeof y !== "number") return;
+		if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+		win.setPosition(Math.round(x), Math.round(y));
+	});
 }
