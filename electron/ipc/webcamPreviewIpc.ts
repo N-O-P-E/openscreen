@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { app, BrowserWindow, ipcMain } from "electron";
+import { createWebcamPreviewWindow, getWebcamPreviewWindow } from "../windows";
 
 export type WebcamPreviewShape = "rectangle" | "circle" | "square" | "rounded";
 
@@ -52,4 +53,37 @@ export function registerWebcamPreviewIpc(): void {
 			return shape;
 		},
 	);
+}
+
+export function registerWebcamPreviewLifecycleIpc(options: {
+	onRequestDisableWebcam: () => void;
+}): void {
+	ipcMain.on("webcam-preview:open", (_event, deviceId: string | undefined) => {
+		createWebcamPreviewWindow(deviceId);
+	});
+
+	ipcMain.on("webcam-preview:close", () => {
+		const win = getWebcamPreviewWindow();
+		if (win && !win.isDestroyed()) win.close();
+	});
+
+	ipcMain.on("webcam-preview:set-device", (_event, deviceId: string | undefined) => {
+		const win = getWebcamPreviewWindow();
+		if (win && !win.isDestroyed()) {
+			win.webContents.send("webcam-preview:device-changed", deviceId);
+		}
+	});
+
+	ipcMain.on("webcam-preview:set-aspect", (_event, ratio: number) => {
+		const win = getWebcamPreviewWindow();
+		if (!win || win.isDestroyed()) return;
+		if (typeof ratio !== "number" || !Number.isFinite(ratio) || ratio <= 0) return;
+		win.setAspectRatio(ratio);
+	});
+
+	ipcMain.on("webcam-preview:request-close", () => {
+		options.onRequestDisableWebcam();
+		const win = getWebcamPreviewWindow();
+		if (win && !win.isDestroyed()) win.close();
+	});
 }

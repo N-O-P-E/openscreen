@@ -14,6 +14,10 @@ import {
 } from "electron";
 import { mainT, setMainLocale } from "./i18n";
 import { registerIpcHandlers } from "./ipc/handlers";
+import {
+	registerWebcamPreviewIpc,
+	registerWebcamPreviewLifecycleIpc,
+} from "./ipc/webcamPreviewIpc";
 import { createEditorWindow, createHudOverlayWindow, createSourceSelectorWindow } from "./windows";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -380,6 +384,15 @@ app.whenReady().then(async () => {
 		}
 		showMainWindow();
 	}
+
+	registerWebcamPreviewIpc();
+	registerWebcamPreviewLifecycleIpc({
+		onRequestDisableWebcam: () => {
+			if (mainWindow && !mainWindow.isDestroyed()) {
+				mainWindow.webContents.send("webcam-preview:disable-webcam");
+			}
+		},
+	});
 
 	registerIpcHandlers(
 		createEditorWindowWrapper,
