@@ -13,6 +13,7 @@ import type {
 	CropRegion,
 	SpeedRegion,
 	WebcamLayoutPreset,
+	WebcamRegion,
 	WebcamSizePreset,
 	ZoomDepth,
 	ZoomRegion,
@@ -31,6 +32,7 @@ import {
 	smoothCursorFocus,
 } from "@/components/video-editor/videoPlayback/cursorFollowUtils";
 import { clampFocusToStage as clampFocusToStageUtil } from "@/components/video-editor/videoPlayback/focusUtils";
+import { computeWebcamPositionAtTime } from "@/components/video-editor/videoPlayback/webcamRegionUtils";
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
@@ -73,6 +75,7 @@ interface FrameRenderConfig {
 	webcamMaskShape?: import("@/components/video-editor/types").WebcamMaskShape;
 	webcamSizePreset?: WebcamSizePreset;
 	webcamPosition?: { cx: number; cy: number } | null;
+	webcamRegions?: WebcamRegion[];
 	annotationRegions?: AnnotationRegion[];
 	speedRegions?: SpeedRegion[];
 	previewWidth?: number;
@@ -459,6 +462,14 @@ export class FrameRenderer {
 		const paddingScale = 1.0 - (effectivePadding / 100) * 0.4;
 		const viewportWidth = width * paddingScale;
 		const viewportHeight = height * paddingScale;
+		const timeMs = this.currentVideoTime * 1000;
+		const effectiveWebcamPosition = computeWebcamPositionAtTime(
+			{
+				globalPosition: this.config.webcamPosition ?? null,
+				regions: this.config.webcamRegions ?? [],
+			},
+			timeMs,
+		);
 		const compositeLayout = computeCompositeLayout({
 			canvasSize: { width, height },
 			maxContentSize: { width: viewportWidth, height: viewportHeight },
@@ -466,7 +477,7 @@ export class FrameRenderer {
 			webcamSize: webcamFrame ? this.config.webcamSize : null,
 			layoutPreset: this.config.webcamLayoutPreset,
 			webcamSizePreset: this.config.webcamSizePreset,
-			webcamPosition: this.config.webcamPosition,
+			webcamPosition: effectiveWebcamPosition,
 			webcamMaskShape: this.config.webcamMaskShape,
 		});
 		if (!compositeLayout) return;
