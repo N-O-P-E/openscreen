@@ -876,7 +876,6 @@ export default function VideoEditor() {
 		}
 	}, []);
 
-	// biome-ignore lint/correctness/noUnusedVariables: wired to TimelineEditor in a later task
 	const handleSelectWebcamRegion = useCallback((id: string | null) => {
 		setSelectedWebcamRegionId(id);
 		if (id) {
@@ -888,7 +887,6 @@ export default function VideoEditor() {
 		}
 	}, []);
 
-	// biome-ignore lint/correctness/noUnusedVariables: wired to TimelineEditor in a later task
 	const handleWebcamRegionAdded = useCallback(
 		(span: Span) => {
 			const newStart = Math.round(span.start);
@@ -919,7 +917,6 @@ export default function VideoEditor() {
 		[pushState, webcamPosition, webcamRegions],
 	);
 
-	// biome-ignore lint/correctness/noUnusedVariables: wired to TimelineEditor in a later task
 	const handleWebcamRegionSpanChange = useCallback(
 		(id: string, span: Span) => {
 			const newStart = Math.round(span.start);
@@ -937,7 +934,7 @@ export default function VideoEditor() {
 		[pushState, webcamRegions],
 	);
 
-	// biome-ignore lint/correctness/noUnusedVariables: wired to TimelineEditor in a later task
+	// biome-ignore lint/correctness/noUnusedVariables: wired to VideoPlayback in a later task
 	const handleWebcamRegionPositionChange = useCallback(
 		(id: string, position: WebcamPosition) => {
 			updateState((prev) => ({
@@ -957,7 +954,6 @@ export default function VideoEditor() {
 		[updateState],
 	);
 
-	// biome-ignore lint/correctness/noUnusedVariables: wired to TimelineEditor in a later task
 	const handleWebcamRegionDelete = useCallback(
 		(id: string) => {
 			pushState((prev) => ({
@@ -2010,6 +2006,12 @@ export default function VideoEditor() {
 									onBlurDelete={handleAnnotationDelete}
 									selectedBlurId={selectedBlurId}
 									onSelectBlur={handleSelectBlur}
+									webcamRegions={webcamRegions}
+									onWebcamRegionAdded={handleWebcamRegionAdded}
+									onWebcamRegionSpanChange={handleWebcamRegionSpanChange}
+									onWebcamRegionDelete={handleWebcamRegionDelete}
+									selectedWebcamRegionId={selectedWebcamRegionId}
+									onSelectWebcamRegion={handleSelectWebcamRegion}
 									aspectRatio={aspectRatio}
 									onAspectRatioChange={(ar) =>
 										pushState({
