@@ -160,7 +160,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getWebcamShape: (): Promise<"rectangle" | "circle" | "square" | "rounded"> => {
 		return ipcRenderer.invoke("webcam-shape:get");
 	},
-	setWebcamShape: (shape: "rectangle" | "circle" | "square" | "rounded") => {
+	setWebcamShape: (
+		shape: "rectangle" | "circle" | "square" | "rounded",
+	): Promise<"rectangle" | "circle" | "square" | "rounded"> => {
 		return ipcRenderer.invoke("webcam-shape:set", shape);
 	},
 	onWebcamShapeChanged: (
