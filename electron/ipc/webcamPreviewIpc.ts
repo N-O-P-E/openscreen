@@ -27,8 +27,8 @@ async function loadSettings(): Promise<WebcamPreviewSettings> {
 }
 
 async function saveSettings(settings: WebcamPreviewSettings): Promise<void> {
-	cachedSettings = settings;
 	await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf8");
+	cachedSettings = settings;
 }
 
 function isValidShape(value: unknown): value is WebcamPreviewShape {
