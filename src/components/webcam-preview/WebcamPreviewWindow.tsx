@@ -43,6 +43,8 @@ export function WebcamPreviewWindow() {
 		aspectRatio: number;
 		pointerId: number;
 	} | null>(null);
+	const pendingResizeFrameRef = useRef<number | null>(null);
+	const pendingResizeSizeRef = useRef<{ width: number; height: number } | null>(null);
 	const [deviceId, setDeviceId] = useState<string | undefined>(() => getDeviceIdFromQuery());
 	const [streamState, setStreamState] = useState<StreamState>({ kind: "idle" });
 	const { shape, setShape } = useWebcamShape();
@@ -89,22 +91,29 @@ export function WebcamPreviewWindow() {
 			newHeight = 180;
 			newWidth = newHeight * resize.aspectRatio;
 		}
-		console.log("[resize grip]", {
-			dx,
-			screenX: event.screenX,
-			startMouseX: resize.startMouseX,
-			newWidth,
-			newHeight,
-			currentInnerWidth: window.innerWidth,
-			currentInnerHeight: window.innerHeight,
+		pendingResizeSizeRef.current = { width: newWidth, height: newHeight };
+		if (pendingResizeFrameRef.current !== null) return;
+		pendingResizeFrameRef.current = requestAnimationFrame(() => {
+			pendingResizeFrameRef.current = null;
+			const pending = pendingResizeSizeRef.current;
+			if (!pending) return;
+			window.electronAPI?.setWebcamPreviewSize(pending.width, pending.height);
 		});
-		window.electronAPI?.setWebcamPreviewSize(newWidth, newHeight);
 	};
 
 	const handleResizePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
 		const resize = resizeStateRef.current;
 		if (!resize) return;
 		if (event.pointerId !== resize.pointerId) return;
+		if (pendingResizeFrameRef.current !== null) {
+			cancelAnimationFrame(pendingResizeFrameRef.current);
+			pendingResizeFrameRef.current = null;
+		}
+		const pending = pendingResizeSizeRef.current;
+		if (pending) {
+			window.electronAPI?.setWebcamPreviewSize(pending.width, pending.height);
+			pendingResizeSizeRef.current = null;
+		}
 		try {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		} catch {
@@ -195,15 +204,6 @@ export function WebcamPreviewWindow() {
 			newWidth = 960;
 			newHeight = newWidth / ratio;
 		}
-		console.log("[shape-sync]", {
-			shape,
-			streamKind: streamState.kind,
-			ratio,
-			newWidth,
-			newHeight,
-			currentInnerWidth: window.innerWidth,
-			currentInnerHeight: window.innerHeight,
-		});
 		api.setWebcamPreviewSize(newWidth, newHeight);
 	}, [shape, streamState]);
 

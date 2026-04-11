@@ -90,35 +90,17 @@ export function registerWebcamPreviewLifecycleIpc(options: {
 
 	ipcMain.on("webcam-preview:set-size", (_event, width: unknown, height: unknown) => {
 		const win = getWebcamPreviewWindow();
-		if (!win || win.isDestroyed()) {
-			console.log("[webcam-preview:set-size] skipped — window missing or destroyed");
-			return;
-		}
-		if (typeof width !== "number" || typeof height !== "number") {
-			console.log("[webcam-preview:set-size] skipped — invalid types", { width, height });
-			return;
-		}
-		if (!Number.isFinite(width) || !Number.isFinite(height)) {
-			console.log("[webcam-preview:set-size] skipped — non-finite", { width, height });
-			return;
-		}
+		if (!win || win.isDestroyed()) return;
+		if (typeof width !== "number" || typeof height !== "number") return;
+		if (!Number.isFinite(width) || !Number.isFinite(height)) return;
 		const roundedWidth = Math.max(180, Math.min(960, Math.round(width)));
 		const roundedHeight = Math.max(180, Math.min(960, Math.round(height)));
 		const currentBounds = win.getBounds();
-		console.log("[webcam-preview:set-size]", {
-			requestedWidth: width,
-			requestedHeight: height,
-			roundedWidth,
-			roundedHeight,
-			currentBounds,
-		});
 		win.setBounds({
 			x: currentBounds.x,
 			y: currentBounds.y,
 			width: roundedWidth,
 			height: roundedHeight,
 		});
-		const newBounds = win.getBounds();
-		console.log("[webcam-preview:set-size] after setBounds", newBounds);
 	});
 }
