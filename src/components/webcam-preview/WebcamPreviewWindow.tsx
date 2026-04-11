@@ -158,14 +158,36 @@ export function WebcamPreviewWindow() {
 	useEffect(() => {
 		const api = window.electronAPI;
 		if (!api) return;
-		if (shape === "rectangle" || shape === "rounded") {
-			if (streamState.kind !== "ready") return;
-			const ratio = getPreviewAspectRatio(shape, streamState.width, streamState.height);
-			api.setWebcamPreviewAspect(ratio);
+
+		const nativeWidth = streamState.kind === "ready" ? streamState.width : 0;
+		const nativeHeight = streamState.kind === "ready" ? streamState.height : 0;
+
+		if ((shape === "rectangle" || shape === "rounded") && streamState.kind !== "ready") {
 			return;
 		}
-		const ratio = getPreviewAspectRatio(shape, 0, 0);
+
+		const ratio = getPreviewAspectRatio(shape, nativeWidth, nativeHeight);
 		api.setWebcamPreviewAspect(ratio);
+
+		let newWidth = window.innerWidth;
+		let newHeight = newWidth / ratio;
+		if (newHeight < 180) {
+			newHeight = 180;
+			newWidth = newHeight * ratio;
+		}
+		if (newHeight > 960) {
+			newHeight = 960;
+			newWidth = newHeight * ratio;
+		}
+		if (newWidth < 180) {
+			newWidth = 180;
+			newHeight = newWidth / ratio;
+		}
+		if (newWidth > 960) {
+			newWidth = 960;
+			newHeight = newWidth / ratio;
+		}
+		api.setWebcamPreviewSize(newWidth, newHeight);
 	}, [shape, streamState]);
 
 	useEffect(() => {
