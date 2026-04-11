@@ -38,9 +38,12 @@ export class VideoMuxer {
 			frameRate: this.config.frameRate,
 		});
 
-		// Create audio source if needed
+		// Create audio source if needed.
+		// Audio is re-encoded to AAC-LC (mp4a.40.2) by the AudioProcessor so the
+		// exported MP4 is compatible with platforms like Twitter/X that reject
+		// MP4 files containing Opus audio tracks.
 		if (this.hasAudio) {
-			this.audioSource = new EncodedAudioPacketSource("opus");
+			this.audioSource = new EncodedAudioPacketSource("aac");
 			this.output.addAudioTrack(this.audioSource);
 		}
 

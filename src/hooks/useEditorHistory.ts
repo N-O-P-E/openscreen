@@ -4,6 +4,7 @@ import type {
 	CropRegion,
 	SpeedRegion,
 	TrimRegion,
+	WebcamKeyframe,
 	WebcamLayoutPreset,
 	WebcamMaskShape,
 	WebcamPosition,
@@ -26,6 +27,7 @@ export interface EditorState {
 	trimRegions: TrimRegion[];
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
+	webcamKeyframes: WebcamKeyframe[];
 	cropRegion: CropRegion;
 	wallpaper: string;
 	shadowIntensity: number;
@@ -45,6 +47,7 @@ export const INITIAL_EDITOR_STATE: EditorState = {
 	trimRegions: [],
 	speedRegions: [],
 	annotationRegions: [],
+	webcamKeyframes: [],
 	cropRegion: DEFAULT_CROP_REGION,
 	wallpaper: "/wallpapers/wallpaper1.jpg",
 	shadowIntensity: 0,

@@ -122,5 +122,20 @@ interface Window {
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<boolean> | boolean) => () => void;
 		setLocale: (locale: string) => Promise<void>;
+		openWebcamPreview: (deviceId: string | undefined) => void;
+		closeWebcamPreview: () => void;
+		setWebcamPreviewDevice: (deviceId: string | undefined) => void;
+		requestCloseWebcamPreview: () => void;
+		setWebcamPreviewPosition: (x: number, y: number) => void;
+		setWebcamPreviewSize: (width: number, height: number) => void;
+		getWebcamShape: () => Promise<"rectangle" | "circle" | "square" | "rounded">;
+		setWebcamShape: (
+			shape: "rectangle" | "circle" | "square" | "rounded",
+		) => Promise<"rectangle" | "circle" | "square" | "rounded">;
+		onWebcamShapeChanged: (
+			callback: (shape: "rectangle" | "circle" | "square" | "rounded") => void,
+		) => () => void;
+		onWebcamPreviewDeviceChanged: (callback: (deviceId: string | undefined) => void) => () => void;
+		onDisableWebcamRequested: (callback: () => void) => () => void;
 	};
 }

@@ -6,6 +6,19 @@ const AUDIO_BITRATE = 128_000;
 const DECODE_BACKPRESSURE_LIMIT = 20;
 const MIN_SPEED_REGION_DELTA_MS = 0.0001;
 
+// AAC-LC (Low Complexity) — the standard codec string for AAC in WebCodecs /
+// MP4 as described at https://www.w3.org/TR/webcodecs-aac-codec-registration/.
+// Re-encoding the source audio to AAC (rather than muxing Opus into MP4) is
+// required for Twitter/X, which rejects MP4 containers with Opus audio.
+const TARGET_AUDIO_CODEC = "mp4a.40.2";
+
+// WebCodecs standard lib.dom types do not yet declare the `aac` extension
+// option, but Chromium (and mediabunny) accept it to force raw AAC output
+// (as opposed to an ADTS-wrapped bitstream that will not mux into MP4).
+type AudioEncoderConfigWithAac = AudioEncoderConfig & {
+	aac?: { format?: "aac" | "adts" };
+};
+
 export class AudioProcessor {
 	private cancelled = false;
 
@@ -132,16 +145,18 @@ export class AudioProcessor {
 		const sampleRate = audioConfig.sampleRate || 48000;
 		const channels = audioConfig.numberOfChannels || 2;
 
-		const encodeConfig: AudioEncoderConfig = {
-			codec: "opus",
+		const encodeConfig: AudioEncoderConfigWithAac = {
+			codec: TARGET_AUDIO_CODEC,
 			sampleRate,
 			numberOfChannels: channels,
 			bitrate: AUDIO_BITRATE,
+			// Force raw AAC output (not ADTS) so mediabunny can mux it into MP4.
+			aac: { format: "aac" },
 		};
 
 		const encodeSupport = await AudioEncoder.isConfigSupported(encodeConfig);
 		if (!encodeSupport.supported) {
-			console.warn("[AudioProcessor] Opus encoding not supported, skipping audio");
+			console.warn("[AudioProcessor] AAC encoding not supported, skipping audio");
 			for (const frame of decodedFrames) frame.close();
 			return;
 		}
@@ -304,7 +319,10 @@ export class AudioProcessor {
 		return recordedBlob;
 	}
 
-	// Demuxes the rendered speed-adjusted blob and feeds encoded chunks into the MP4 muxer.
+	// Demuxes the rendered speed-adjusted webm blob (Opus), decodes it, and
+	// re-encodes the audio as AAC before handing it to the MP4 muxer. The
+	// source blob comes from MediaRecorder (always webm/Opus), but MP4 output
+	// for platforms like Twitter/X must contain AAC audio, not Opus.
 	private async muxRenderedAudioBlob(blob: Blob, muxer: VideoMuxer): Promise<void> {
 		if (this.cancelled) return;
 
@@ -314,19 +332,34 @@ export class AudioProcessor {
 
 		try {
 			await demuxer.load(file);
-			const audioConfig = (await demuxer.getDecoderConfig("audio")) as AudioDecoderConfig;
-			const reader = (demuxer.read("audio") as ReadableStream<EncodedAudioChunk>).getReader();
-			let isFirstChunk = true;
+			const sourceAudioConfig = (await demuxer.getDecoderConfig("audio")) as AudioDecoderConfig;
 
+			const decodeSupport = await AudioDecoder.isConfigSupported(sourceAudioConfig);
+			if (!decodeSupport.supported) {
+				console.warn(
+					"[AudioProcessor] Rendered audio codec not supported for decode, skipping audio",
+				);
+				return;
+			}
+
+			// Phase 1: decode the rendered Opus stream into raw AudioData frames.
+			const decodedFrames: AudioData[] = [];
+			const decoder = new AudioDecoder({
+				output: (data: AudioData) => decodedFrames.push(data),
+				error: (e: DOMException) =>
+					console.error("[AudioProcessor] Rendered-audio decode error:", e),
+			});
+			decoder.configure(sourceAudioConfig);
+
+			const reader = (demuxer.read("audio") as ReadableStream<EncodedAudioChunk>).getReader();
 			try {
 				while (!this.cancelled) {
 					const { done, value: chunk } = await reader.read();
 					if (done || !chunk) break;
-					if (isFirstChunk) {
-						await muxer.addAudioChunk(chunk, { decoderConfig: audioConfig });
-						isFirstChunk = false;
-					} else {
-						await muxer.addAudioChunk(chunk);
+					decoder.decode(chunk);
+
+					while (decoder.decodeQueueSize > DECODE_BACKPRESSURE_LIMIT && !this.cancelled) {
+						await new Promise((resolve) => setTimeout(resolve, 1));
 					}
 				}
 			} finally {
@@ -336,6 +369,75 @@ export class AudioProcessor {
 					/* reader already closed */
 				}
 			}
+
+			if (decoder.state === "configured") {
+				await decoder.flush();
+				decoder.close();
+			}
+
+			if (this.cancelled || decodedFrames.length === 0) {
+				for (const frame of decodedFrames) frame.close();
+				return;
+			}
+
+			// Phase 2: re-encode the decoded PCM to AAC for the MP4 output.
+			const sampleRate = sourceAudioConfig.sampleRate || 48000;
+			const channels = sourceAudioConfig.numberOfChannels || 2;
+
+			const encodeConfig: AudioEncoderConfigWithAac = {
+				codec: TARGET_AUDIO_CODEC,
+				sampleRate,
+				numberOfChannels: channels,
+				bitrate: AUDIO_BITRATE,
+				aac: { format: "aac" },
+			};
+
+			const encodeSupport = await AudioEncoder.isConfigSupported(encodeConfig);
+			if (!encodeSupport.supported) {
+				console.warn(
+					"[AudioProcessor] AAC encoding not supported for rendered audio, skipping audio",
+				);
+				for (const frame of decodedFrames) frame.close();
+				return;
+			}
+
+			const encodedChunks: {
+				chunk: EncodedAudioChunk;
+				meta?: EncodedAudioChunkMetadata;
+			}[] = [];
+
+			const encoder = new AudioEncoder({
+				output: (chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata) => {
+					encodedChunks.push({ chunk, meta });
+				},
+				error: (e: DOMException) =>
+					console.error("[AudioProcessor] Rendered-audio encode error:", e),
+			});
+			encoder.configure(encodeConfig);
+
+			for (const audioData of decodedFrames) {
+				if (this.cancelled) {
+					audioData.close();
+					continue;
+				}
+				encoder.encode(audioData);
+				audioData.close();
+			}
+
+			if (encoder.state === "configured") {
+				await encoder.flush();
+				encoder.close();
+			}
+
+			// Phase 3: flush encoded AAC chunks to the MP4 muxer.
+			for (const { chunk, meta } of encodedChunks) {
+				if (this.cancelled) break;
+				await muxer.addAudioChunk(chunk, meta);
+			}
+
+			console.log(
+				`[AudioProcessor] Re-encoded ${decodedFrames.length} rendered audio frames to ${encodedChunks.length} AAC chunks`,
+			);
 		} finally {
 			try {
 				demuxer.destroy();

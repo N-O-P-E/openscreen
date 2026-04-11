@@ -26,6 +26,7 @@ import {
 	MIN_PLAYBACK_SPEED,
 	type SpeedRegion,
 	type TrimRegion,
+	type WebcamKeyframe,
 	type WebcamLayoutPreset,
 	type WebcamMaskShape,
 	type WebcamPosition,
@@ -55,6 +56,7 @@ export interface ProjectEditorState {
 	trimRegions: TrimRegion[];
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
+	webcamKeyframes: WebcamKeyframe[];
 	aspectRatio: AspectRatio;
 	webcamLayoutPreset: WebcamLayoutPreset;
 	webcamMaskShape: WebcamMaskShape;
@@ -355,6 +357,43 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				})
 		: [];
 
+	const normalizedWebcamKeyframes: WebcamKeyframe[] = Array.isArray(editor.webcamKeyframes)
+		? editor.webcamKeyframes
+				.filter((keyframe): keyframe is WebcamKeyframe =>
+					Boolean(keyframe && typeof keyframe.id === "string"),
+				)
+				.map((keyframe) => {
+					const timeMs = Math.max(
+						0,
+						isFiniteNumber(keyframe.timeMs) ? Math.round(keyframe.timeMs) : 0,
+					);
+					const cx = clamp(
+						isFiniteNumber(keyframe.position?.cx) ? keyframe.position.cx : 0.5,
+						0,
+						1,
+					);
+					const cy = clamp(
+						isFiniteNumber(keyframe.position?.cy) ? keyframe.position.cy : 0.5,
+						0,
+						1,
+					);
+					const allowedShapes: WebcamMaskShape[] = ["rectangle", "circle", "square", "rounded"];
+					const shape: WebcamMaskShape = allowedShapes.includes(keyframe.shape as WebcamMaskShape)
+						? (keyframe.shape as WebcamMaskShape)
+						: DEFAULT_WEBCAM_MASK_SHAPE;
+					const rawSize = isFiniteNumber(keyframe.sizePreset) ? keyframe.sizePreset : null;
+					const sizePreset: WebcamSizePreset =
+						rawSize !== null ? clamp(rawSize, 10, 50) : DEFAULT_WEBCAM_SIZE_PRESET;
+					return {
+						id: keyframe.id,
+						timeMs,
+						position: { cx, cy },
+						shape,
+						sizePreset,
+					};
+				})
+		: [];
+
 	const rawCropX = isFiniteNumber(editor.cropRegion?.x)
 		? editor.cropRegion.x
 		: DEFAULT_CROP_REGION.x;
@@ -396,6 +435,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		trimRegions: normalizedTrimRegions,
 		speedRegions: normalizedSpeedRegions,
 		annotationRegions: normalizedAnnotationRegions,
+		webcamKeyframes: normalizedWebcamKeyframes,
 		aspectRatio:
 			editor.aspectRatio && validAspectRatios.has(editor.aspectRatio) ? editor.aspectRatio : "16:9",
 		webcamLayoutPreset:

@@ -152,3 +152,70 @@ export function createSourceSelectorWindow(): BrowserWindow {
 
 	return win;
 }
+
+let webcamPreviewWindow: BrowserWindow | null = null;
+
+export function getWebcamPreviewWindow(): BrowserWindow | null {
+	return webcamPreviewWindow;
+}
+
+export function createWebcamPreviewWindow(deviceId: string | undefined): BrowserWindow {
+	if (webcamPreviewWindow && !webcamPreviewWindow.isDestroyed()) {
+		webcamPreviewWindow.show();
+		webcamPreviewWindow.focus();
+		return webcamPreviewWindow;
+	}
+
+	const primaryDisplay = screen.getPrimaryDisplay();
+	const { workArea } = primaryDisplay;
+
+	const windowWidth = 320;
+	const windowHeight = 320;
+	const margin = 24;
+
+	const x = Math.floor(workArea.x + workArea.width - windowWidth - margin);
+	const y = Math.floor(workArea.y + workArea.height - windowHeight - margin);
+
+	const win = new BrowserWindow({
+		width: windowWidth,
+		height: windowHeight,
+		x,
+		y,
+		frame: false,
+		transparent: true,
+		resizable: true,
+		movable: true,
+		alwaysOnTop: true,
+		skipTaskbar: true,
+		hasShadow: false,
+		show: !HEADLESS,
+		webPreferences: {
+			preload: path.join(__dirname, "preload.mjs"),
+			nodeIntegration: false,
+			contextIsolation: true,
+			backgroundThrottling: false,
+		},
+	});
+
+	webcamPreviewWindow = win;
+
+	win.setContentProtection(true);
+
+	win.on("closed", () => {
+		if (webcamPreviewWindow === win) {
+			webcamPreviewWindow = null;
+		}
+	});
+
+	const query: Record<string, string> = { windowType: "webcam-preview" };
+	if (deviceId) query.deviceId = deviceId;
+
+	if (VITE_DEV_SERVER_URL) {
+		const params = new URLSearchParams(query).toString();
+		win.loadURL(`${VITE_DEV_SERVER_URL}?${params}`);
+	} else {
+		win.loadFile(path.join(RENDERER_DIST, "index.html"), { query });
+	}
+
+	return win;
+}

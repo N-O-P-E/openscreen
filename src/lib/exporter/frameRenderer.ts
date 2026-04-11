@@ -12,12 +12,17 @@ import type {
 	AnnotationRegion,
 	CropRegion,
 	SpeedRegion,
+	WebcamKeyframe,
 	WebcamLayoutPreset,
 	WebcamSizePreset,
 	ZoomDepth,
 	ZoomRegion,
 } from "@/components/video-editor/types";
-import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
+import {
+	DEFAULT_WEBCAM_MASK_SHAPE,
+	DEFAULT_WEBCAM_SIZE_PRESET,
+	ZOOM_DEPTH_SCALES,
+} from "@/components/video-editor/types";
 import {
 	AUTO_FOLLOW_RAMP_DISTANCE,
 	AUTO_FOLLOW_SMOOTHING_FACTOR,
@@ -31,6 +36,7 @@ import {
 	smoothCursorFocus,
 } from "@/components/video-editor/videoPlayback/cursorFollowUtils";
 import { clampFocusToStage as clampFocusToStageUtil } from "@/components/video-editor/videoPlayback/focusUtils";
+import { computeWebcamStateAtTime } from "@/components/video-editor/videoPlayback/webcamKeyframeUtils";
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
@@ -73,6 +79,7 @@ interface FrameRenderConfig {
 	webcamMaskShape?: import("@/components/video-editor/types").WebcamMaskShape;
 	webcamSizePreset?: WebcamSizePreset;
 	webcamPosition?: { cx: number; cy: number } | null;
+	webcamKeyframes?: WebcamKeyframe[];
 	annotationRegions?: AnnotationRegion[];
 	speedRegions?: SpeedRegion[];
 	previewWidth?: number;
@@ -459,15 +466,28 @@ export class FrameRenderer {
 		const paddingScale = 1.0 - (effectivePadding / 100) * 0.4;
 		const viewportWidth = width * paddingScale;
 		const viewportHeight = height * paddingScale;
+		const timeMs = this.currentVideoTime * 1000;
+		const webcamState = computeWebcamStateAtTime(
+			{
+				globalPosition: this.config.webcamPosition ?? null,
+				globalShape: this.config.webcamMaskShape ?? DEFAULT_WEBCAM_MASK_SHAPE,
+				globalSizePreset: this.config.webcamSizePreset ?? DEFAULT_WEBCAM_SIZE_PRESET,
+				keyframes: this.config.webcamKeyframes ?? [],
+			},
+			timeMs,
+		);
+		const effectiveWebcamPosition = webcamState.position;
+		const effectiveWebcamShape = webcamState.shape;
+		const effectiveWebcamSizePreset = webcamState.sizePreset;
 		const compositeLayout = computeCompositeLayout({
 			canvasSize: { width, height },
 			maxContentSize: { width: viewportWidth, height: viewportHeight },
 			screenSize: { width: croppedVideoWidth, height: croppedVideoHeight },
 			webcamSize: webcamFrame ? this.config.webcamSize : null,
 			layoutPreset: this.config.webcamLayoutPreset,
-			webcamSizePreset: this.config.webcamSizePreset,
-			webcamPosition: this.config.webcamPosition,
-			webcamMaskShape: this.config.webcamMaskShape,
+			webcamSizePreset: effectiveWebcamSizePreset,
+			webcamPosition: effectiveWebcamPosition,
+			webcamMaskShape: effectiveWebcamShape,
 		});
 		if (!compositeLayout) return;
 
@@ -803,8 +823,39 @@ export class FrameRenderer {
 			ctx.fillStyle = "#000000";
 			ctx.fill();
 			ctx.clip();
+			// Apply object-cover logic so the webcam source is cropped (not stretched)
+			// to fill the destination rect. This mirrors the editor preview, which uses
+			// CSS `object-fit: cover` on the <video> element. Without this, a 16:9 source
+			// drawn into a square (circle/square mask) gets squished, distorting the face.
+			const srcWidth = webcamFrame.displayWidth || webcamFrame.codedWidth;
+			const srcHeight = webcamFrame.displayHeight || webcamFrame.codedHeight;
+			let sx = 0;
+			let sy = 0;
+			let sw = srcWidth;
+			let sh = srcHeight;
+			if (srcWidth > 0 && srcHeight > 0 && webcamRect.width > 0 && webcamRect.height > 0) {
+				const imageAspect = srcWidth / srcHeight;
+				const rectAspect = webcamRect.width / webcamRect.height;
+				if (imageAspect > rectAspect) {
+					// Source is wider than destination — crop left/right
+					sh = srcHeight;
+					sw = sh * rectAspect;
+					sx = (srcWidth - sw) / 2;
+					sy = 0;
+				} else {
+					// Source is taller than destination — crop top/bottom
+					sw = srcWidth;
+					sh = sw / rectAspect;
+					sx = 0;
+					sy = (srcHeight - sh) / 2;
+				}
+			}
 			ctx.drawImage(
 				webcamFrame as unknown as CanvasImageSource,
+				sx,
+				sy,
+				sw,
+				sh,
 				webcamRect.x,
 				webcamRect.y,
 				webcamRect.width,
