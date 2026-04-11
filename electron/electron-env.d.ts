@@ -145,6 +145,7 @@ interface Window {
 		setWebcamPreviewAspect: (ratio: number) => void;
 		requestCloseWebcamPreview: () => void;
 		setWebcamPreviewPosition: (x: number, y: number) => void;
+		setWebcamPreviewSize: (width: number, height: number) => void;
 		getWebcamShape: () => Promise<"rectangle" | "circle" | "square" | "rounded">;
 		setWebcamShape: (
 			shape: "rectangle" | "circle" | "square" | "rounded",
