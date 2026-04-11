@@ -199,6 +199,8 @@ export function createWebcamPreviewWindow(deviceId: string | undefined): Browser
 
 	webcamPreviewWindow = win;
 
+	win.setContentProtection(true);
+
 	win.on("closed", () => {
 		if (webcamPreviewWindow === win) {
 			webcamPreviewWindow = null;
