@@ -84,9 +84,13 @@ export function WebcamPreviewWindow() {
 	useEffect(() => {
 		const api = window.electronAPI;
 		if (!api) return;
-		const nativeWidth = streamState.kind === "ready" ? streamState.width : 0;
-		const nativeHeight = streamState.kind === "ready" ? streamState.height : 0;
-		const ratio = getPreviewAspectRatio(shape, nativeWidth, nativeHeight);
+		if (shape === "rectangle" || shape === "rounded") {
+			if (streamState.kind !== "ready") return;
+			const ratio = getPreviewAspectRatio(shape, streamState.width, streamState.height);
+			api.setWebcamPreviewAspect(ratio);
+			return;
+		}
+		const ratio = getPreviewAspectRatio(shape, 0, 0);
 		api.setWebcamPreviewAspect(ratio);
 	}, [shape, streamState]);
 
@@ -94,7 +98,6 @@ export function WebcamPreviewWindow() {
 
 	return (
 		<div
-			style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 			className="relative h-screen w-screen overflow-hidden bg-transparent"
 			onMouseEnter={() => setHovering(true)}
 			onMouseLeave={() => setHovering(false)}
@@ -104,7 +107,7 @@ export function WebcamPreviewWindow() {
 					"absolute inset-0 overflow-hidden bg-black",
 					shape === "circle" && "rounded-full",
 				)}
-				style={{ clipPath }}
+				style={{ clipPath, WebkitAppRegion: "drag" } as React.CSSProperties}
 			>
 				{streamState.kind === "ready" && (
 					<video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
