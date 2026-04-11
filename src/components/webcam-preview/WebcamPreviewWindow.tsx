@@ -41,6 +41,7 @@ export function WebcamPreviewWindow() {
 		startMouseX: number;
 		startMouseY: number;
 		aspectRatio: number;
+		pointerId: number;
 	} | null>(null);
 	const [deviceId, setDeviceId] = useState<string | undefined>(() => getDeviceIdFromQuery());
 	const [streamState, setStreamState] = useState<StreamState>({ kind: "idle" });
@@ -56,9 +57,11 @@ export function WebcamPreviewWindow() {
 		};
 	};
 
-	const handleResizeStart = (event: React.MouseEvent<HTMLDivElement>) => {
+	const handleResizePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
 		if (event.button !== 0) return;
 		event.stopPropagation();
+		const target = event.currentTarget;
+		target.setPointerCapture(event.pointerId);
 		const width = window.innerWidth;
 		const height = window.innerHeight;
 		resizeStateRef.current = {
@@ -67,7 +70,38 @@ export function WebcamPreviewWindow() {
 			startMouseX: event.screenX,
 			startMouseY: event.screenY,
 			aspectRatio: width / height,
+			pointerId: event.pointerId,
 		};
+	};
+
+	const handleResizePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+		const resize = resizeStateRef.current;
+		if (!resize) return;
+		if (event.pointerId !== resize.pointerId) return;
+		const dx = event.screenX - resize.startMouseX;
+		let newWidth = Math.max(180, Math.min(960, resize.startWinWidth + dx));
+		let newHeight = newWidth / resize.aspectRatio;
+		if (newHeight > 960) {
+			newHeight = 960;
+			newWidth = newHeight * resize.aspectRatio;
+		}
+		if (newHeight < 180) {
+			newHeight = 180;
+			newWidth = newHeight * resize.aspectRatio;
+		}
+		window.electronAPI?.setWebcamPreviewSize(newWidth, newHeight);
+	};
+
+	const handleResizePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+		const resize = resizeStateRef.current;
+		if (!resize) return;
+		if (event.pointerId !== resize.pointerId) return;
+		try {
+			event.currentTarget.releasePointerCapture(event.pointerId);
+		} catch {
+			// ignore — capture may have already been released
+		}
+		resizeStateRef.current = null;
 	};
 
 	useEffect(() => {
@@ -136,23 +170,6 @@ export function WebcamPreviewWindow() {
 
 	useEffect(() => {
 		const handleMouseMove = (event: MouseEvent) => {
-			const resize = resizeStateRef.current;
-			if (resize) {
-				const dx = event.screenX - resize.startMouseX;
-				let newWidth = resize.startWinWidth + dx;
-				newWidth = Math.max(180, Math.min(960, newWidth));
-				let newHeight = newWidth / resize.aspectRatio;
-				if (newHeight > 960) {
-					newHeight = 960;
-					newWidth = newHeight * resize.aspectRatio;
-				}
-				if (newHeight < 180) {
-					newHeight = 180;
-					newWidth = newHeight * resize.aspectRatio;
-				}
-				window.electronAPI?.setWebcamPreviewSize(newWidth, newHeight);
-				return;
-			}
 			const drag = dragStateRef.current;
 			if (!drag) return;
 			const dx = event.screenX - drag.startMouseX;
@@ -161,7 +178,6 @@ export function WebcamPreviewWindow() {
 		};
 		const handleMouseUp = () => {
 			dragStateRef.current = null;
-			resizeStateRef.current = null;
 		};
 		window.addEventListener("mousemove", handleMouseMove);
 		window.addEventListener("mouseup", handleMouseUp);
@@ -215,7 +231,10 @@ export function WebcamPreviewWindow() {
 			/>
 
 			<div
-				onMouseDown={handleResizeStart}
+				onPointerDown={handleResizePointerDown}
+				onPointerMove={handleResizePointerMove}
+				onPointerUp={handleResizePointerUp}
+				onPointerCancel={handleResizePointerUp}
 				aria-label="Resize preview"
 				style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 				className={cn(
