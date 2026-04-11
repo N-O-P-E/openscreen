@@ -934,7 +934,6 @@ export default function VideoEditor() {
 		[pushState, webcamRegions],
 	);
 
-	// biome-ignore lint/correctness/noUnusedVariables: wired to VideoPlayback in a later task
 	const handleWebcamRegionPositionChange = useCallback(
 		(id: string, position: WebcamPosition) => {
 			updateState((prev) => ({
@@ -1909,6 +1908,9 @@ export default function VideoEditor() {
 											webcamPosition={webcamPosition}
 											onWebcamPositionChange={(pos) => updateState({ webcamPosition: pos })}
 											onWebcamPositionDragEnd={commitState}
+											webcamRegions={webcamRegions}
+											selectedWebcamRegionId={selectedWebcamRegionId}
+											onWebcamRegionPositionChange={handleWebcamRegionPositionChange}
 											onDurationChange={setDuration}
 											onTimeUpdate={setCurrentTime}
 											currentTime={currentTime}
