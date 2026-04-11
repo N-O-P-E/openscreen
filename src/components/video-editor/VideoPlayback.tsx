@@ -42,7 +42,6 @@ import {
 	type TrimRegion,
 	type WebcamKeyframe,
 	type WebcamMaskShape,
-	type WebcamPosition,
 	ZOOM_DEPTH_SCALES,
 	type ZoomDepth,
 	type ZoomFocus,
@@ -79,11 +78,9 @@ interface VideoPlaybackProps {
 	webcamMaskShape?: WebcamMaskShape;
 	webcamSizePreset?: WebcamSizePreset;
 	webcamPosition?: { cx: number; cy: number } | null;
-	onWebcamPositionChange?: (position: { cx: number; cy: number }) => void;
-	onWebcamPositionDragEnd?: () => void;
+	onWebcamCanvasDrag?: (position: { cx: number; cy: number }) => void;
+	onWebcamCanvasDragEnd?: () => void;
 	webcamKeyframes?: WebcamKeyframe[];
-	selectedWebcamKeyframeId?: string | null;
-	onWebcamKeyframePositionChange?: (id: string, position: WebcamPosition) => void;
 	onDurationChange: (duration: number) => void;
 	onTimeUpdate: (time: number) => void;
 	currentTime: number;
@@ -140,11 +137,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			webcamMaskShape,
 			webcamSizePreset,
 			webcamPosition,
-			onWebcamPositionChange,
-			onWebcamPositionDragEnd,
+			onWebcamCanvasDrag,
+			onWebcamCanvasDragEnd,
 			webcamKeyframes = [],
-			selectedWebcamKeyframeId,
-			onWebcamKeyframePositionChange,
 			onDurationChange,
 			onTimeUpdate,
 			currentTime,
@@ -520,11 +515,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				(event.clientY - webcamDragOffsetRef.current.dy - containerRect.top) / containerRect.height,
 			);
 			const newPos = { cx, cy };
-			if (selectedWebcamKeyframeId && onWebcamKeyframePositionChange) {
-				onWebcamKeyframePositionChange(selectedWebcamKeyframeId, newPos);
-			} else if (onWebcamPositionChange) {
-				onWebcamPositionChange(newPos);
-			}
+			onWebcamCanvasDrag?.(newPos);
 		};
 
 		const handleWebcamPointerUp = (event: React.PointerEvent<HTMLVideoElement>) => {
@@ -535,7 +526,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			} catch {
 				// Pointer may already be released.
 			}
-			onWebcamPositionDragEnd?.();
+			onWebcamCanvasDragEnd?.();
 		};
 
 		useEffect(() => {

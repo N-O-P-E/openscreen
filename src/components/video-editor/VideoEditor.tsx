@@ -78,6 +78,7 @@ import {
 	type ZoomRegion,
 } from "./types";
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
+import { computeWebcamStateAtTime } from "./videoPlayback/webcamKeyframeUtils";
 
 export default function VideoEditor() {
 	const {
@@ -157,6 +158,7 @@ export default function VideoEditor() {
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
 	const nextWebcamKeyframeIdRef = useRef<number>(1);
+	const activeWebcamDragKeyframeIdRef = useRef<string | null>(null);
 
 	const { shortcuts, isMac } = useShortcuts();
 	const t = useScopedT("editor");
@@ -930,50 +932,168 @@ export default function VideoEditor() {
 		[pushState, webcamKeyframes],
 	);
 
-	const handleWebcamKeyframePositionChange = useCallback(
-		(id: string, position: WebcamPosition) => {
-			updateState((prev) => ({
-				webcamKeyframes: prev.webcamKeyframes.map((kf) =>
-					kf.id === id
-						? {
-								...kf,
-								position: {
-									cx: Math.max(0, Math.min(1, position.cx)),
-									cy: Math.max(0, Math.min(1, position.cy)),
-								},
-							}
-						: kf,
-				),
-			}));
-		},
-		[updateState],
-	);
+	const handleWebcamCanvasDrag = useCallback(
+		(position: WebcamPosition) => {
+			const clampedPos: WebcamPosition = {
+				cx: Math.max(0, Math.min(1, position.cx)),
+				cy: Math.max(0, Math.min(1, position.cy)),
+			};
 
-	const handleWebcamKeyframeShapeChange = useCallback(
-		(id: string, shape: WebcamMaskShape) => {
+			if (activeWebcamDragKeyframeIdRef.current !== null) {
+				const id = activeWebcamDragKeyframeIdRef.current;
+				updateState((prev) => ({
+					webcamKeyframes: prev.webcamKeyframes.map((kf) =>
+						kf.id === id ? { ...kf, position: clampedPos } : kf,
+					),
+				}));
+				return;
+			}
+
+			const timeMs = Math.round(currentTime * 1000);
+			const tolerance = 100;
+			const existing = webcamKeyframes.find((kf) => Math.abs(kf.timeMs - timeMs) <= tolerance);
+
+			if (existing) {
+				activeWebcamDragKeyframeIdRef.current = existing.id;
+				updateState((prev) => ({
+					webcamKeyframes: prev.webcamKeyframes.map((kf) =>
+						kf.id === existing.id ? { ...kf, position: clampedPos } : kf,
+					),
+				}));
+				setSelectedWebcamKeyframeId(existing.id);
+				return;
+			}
+
+			const effectiveState = computeWebcamStateAtTime(
+				{
+					globalPosition: webcamPosition,
+					globalShape: webcamMaskShape,
+					globalSizePreset: webcamSizePreset,
+					keyframes: webcamKeyframes,
+				},
+				timeMs,
+			);
+			const id = `webcam-kf-${nextWebcamKeyframeIdRef.current++}`;
+			const newKeyframe: WebcamKeyframe = {
+				id,
+				timeMs,
+				position: clampedPos,
+				shape: effectiveState.shape,
+				sizePreset: effectiveState.sizePreset,
+			};
+			activeWebcamDragKeyframeIdRef.current = id;
 			pushState((prev) => ({
-				webcamKeyframes: prev.webcamKeyframes.map((kf) => (kf.id === id ? { ...kf, shape } : kf)),
+				webcamKeyframes: [...prev.webcamKeyframes, newKeyframe],
 			}));
+			setSelectedWebcamKeyframeId(id);
 		},
-		[pushState],
+		[
+			currentTime,
+			webcamKeyframes,
+			webcamPosition,
+			webcamMaskShape,
+			webcamSizePreset,
+			updateState,
+			pushState,
+		],
 	);
 
-	const handleWebcamKeyframeSizeChange = useCallback(
-		(id: string, sizePreset: WebcamSizePreset) => {
+	const handleWebcamCanvasDragEnd = useCallback(() => {
+		activeWebcamDragKeyframeIdRef.current = null;
+		commitState();
+	}, [commitState]);
+
+	const handleWebcamShapeChangeAtPlayhead = useCallback(
+		(shape: WebcamMaskShape) => {
+			const timeMs = Math.round(currentTime * 1000);
+			const tolerance = 100;
+			const existing = webcamKeyframes.find((kf) => Math.abs(kf.timeMs - timeMs) <= tolerance);
+			if (existing) {
+				pushState((prev) => ({
+					webcamKeyframes: prev.webcamKeyframes.map((kf) =>
+						kf.id === existing.id ? { ...kf, shape } : kf,
+					),
+				}));
+				setSelectedWebcamKeyframeId(existing.id);
+				return;
+			}
+			const effectiveState = computeWebcamStateAtTime(
+				{
+					globalPosition: webcamPosition,
+					globalShape: webcamMaskShape,
+					globalSizePreset: webcamSizePreset,
+					keyframes: webcamKeyframes,
+				},
+				timeMs,
+			);
+			const id = `webcam-kf-${nextWebcamKeyframeIdRef.current++}`;
+			const newKeyframe: WebcamKeyframe = {
+				id,
+				timeMs,
+				position: effectiveState.position,
+				shape,
+				sizePreset: effectiveState.sizePreset,
+			};
 			pushState((prev) => ({
-				webcamKeyframes: prev.webcamKeyframes.map((kf) =>
-					kf.id === id ? { ...kf, sizePreset } : kf,
-				),
+				webcamKeyframes: [...prev.webcamKeyframes, newKeyframe],
 			}));
+			setSelectedWebcamKeyframeId(id);
 		},
-		[pushState],
+		[currentTime, webcamKeyframes, webcamPosition, webcamMaskShape, webcamSizePreset, pushState],
 	);
 
-	// These handlers will be wired into SettingsPanel in a later phase so it
-	// can route shape/size edits to the currently selected webcam keyframe.
-	// Reference them here to satisfy noUnusedLocals until that wiring lands.
-	void handleWebcamKeyframeShapeChange;
-	void handleWebcamKeyframeSizeChange;
+	const handleWebcamSizeChangeAtPlayhead = useCallback(
+		(sizePreset: WebcamSizePreset) => {
+			const timeMs = Math.round(currentTime * 1000);
+			const tolerance = 100;
+			const existing = webcamKeyframes.find((kf) => Math.abs(kf.timeMs - timeMs) <= tolerance);
+			if (existing) {
+				pushState((prev) => ({
+					webcamKeyframes: prev.webcamKeyframes.map((kf) =>
+						kf.id === existing.id ? { ...kf, sizePreset } : kf,
+					),
+				}));
+				setSelectedWebcamKeyframeId(existing.id);
+				return;
+			}
+			const effectiveState = computeWebcamStateAtTime(
+				{
+					globalPosition: webcamPosition,
+					globalShape: webcamMaskShape,
+					globalSizePreset: webcamSizePreset,
+					keyframes: webcamKeyframes,
+				},
+				timeMs,
+			);
+			const id = `webcam-kf-${nextWebcamKeyframeIdRef.current++}`;
+			const newKeyframe: WebcamKeyframe = {
+				id,
+				timeMs,
+				position: effectiveState.position,
+				shape: effectiveState.shape,
+				sizePreset,
+			};
+			pushState((prev) => ({
+				webcamKeyframes: [...prev.webcamKeyframes, newKeyframe],
+			}));
+			setSelectedWebcamKeyframeId(id);
+		},
+		[currentTime, webcamKeyframes, webcamPosition, webcamMaskShape, webcamSizePreset, pushState],
+	);
+
+	const effectiveWebcamStateForEditor = useMemo(
+		() =>
+			computeWebcamStateAtTime(
+				{
+					globalPosition: webcamPosition,
+					globalShape: webcamMaskShape,
+					globalSizePreset: webcamSizePreset,
+					keyframes: webcamKeyframes,
+				},
+				Math.round(currentTime * 1000),
+			),
+		[webcamPosition, webcamMaskShape, webcamSizePreset, webcamKeyframes, currentTime],
+	);
 
 	const handleWebcamKeyframeDelete = useCallback(
 		(id: string) => {
@@ -1931,11 +2051,9 @@ export default function VideoEditor() {
 											webcamMaskShape={webcamMaskShape}
 											webcamSizePreset={webcamSizePreset}
 											webcamPosition={webcamPosition}
-											onWebcamPositionChange={(pos) => updateState({ webcamPosition: pos })}
-											onWebcamPositionDragEnd={commitState}
+											onWebcamCanvasDrag={handleWebcamCanvasDrag}
+											onWebcamCanvasDragEnd={handleWebcamCanvasDragEnd}
 											webcamKeyframes={webcamKeyframes}
-											selectedWebcamKeyframeId={selectedWebcamKeyframeId}
-											onWebcamKeyframePositionChange={handleWebcamKeyframePositionChange}
 											onDurationChange={setDuration}
 											onTimeUpdate={setCurrentTime}
 											currentTime={currentTime}
@@ -2100,10 +2218,10 @@ export default function VideoEditor() {
 								webcamPosition: preset === "vertical-stack" ? null : webcamPosition,
 							})
 						}
-						webcamMaskShape={webcamMaskShape}
-						onWebcamMaskShapeChange={(shape) => pushState({ webcamMaskShape: shape })}
-						webcamSizePreset={webcamSizePreset}
-						onWebcamSizePresetChange={(v) => updateState({ webcamSizePreset: v })}
+						webcamMaskShape={effectiveWebcamStateForEditor.shape}
+						onWebcamMaskShapeChange={handleWebcamShapeChangeAtPlayhead}
+						webcamSizePreset={effectiveWebcamStateForEditor.sizePreset}
+						onWebcamSizePresetChange={handleWebcamSizeChangeAtPlayhead}
 						onWebcamSizePresetCommit={commitState}
 						videoElement={videoPlaybackRef.current?.video || null}
 						exportQuality={exportQuality}
