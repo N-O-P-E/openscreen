@@ -6,7 +6,14 @@ export function getPreviewAspectRatio(
 	nativeHeight: number,
 ): number {
 	if (shape === "circle" || shape === "square") return 1;
-	if (nativeWidth > 0 && nativeHeight > 0) return nativeWidth / nativeHeight;
+	if (
+		Number.isFinite(nativeWidth) &&
+		Number.isFinite(nativeHeight) &&
+		nativeWidth > 0 &&
+		nativeHeight > 0
+	) {
+		return nativeWidth / nativeHeight;
+	}
 	return 16 / 9;
 }
 
