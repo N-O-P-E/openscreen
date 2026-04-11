@@ -142,4 +142,49 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("request-save-before-close", listener);
 		return () => ipcRenderer.removeListener("request-save-before-close", listener);
 	},
+	openWebcamPreview: (deviceId: string | undefined) => {
+		ipcRenderer.send("webcam-preview:open", deviceId);
+	},
+	closeWebcamPreview: () => {
+		ipcRenderer.send("webcam-preview:close");
+	},
+	setWebcamPreviewDevice: (deviceId: string | undefined) => {
+		ipcRenderer.send("webcam-preview:set-device", deviceId);
+	},
+	setWebcamPreviewAspect: (ratio: number) => {
+		ipcRenderer.send("webcam-preview:set-aspect", ratio);
+	},
+	requestCloseWebcamPreview: () => {
+		ipcRenderer.send("webcam-preview:request-close");
+	},
+	getWebcamShape: (): Promise<"rectangle" | "circle" | "square" | "rounded"> => {
+		return ipcRenderer.invoke("webcam-shape:get");
+	},
+	setWebcamShape: (shape: "rectangle" | "circle" | "square" | "rounded") => {
+		return ipcRenderer.invoke("webcam-shape:set", shape);
+	},
+	onWebcamShapeChanged: (
+		callback: (shape: "rectangle" | "circle" | "square" | "rounded") => void,
+	) => {
+		const listener = (
+			_event: Electron.IpcRendererEvent,
+			shape: "rectangle" | "circle" | "square" | "rounded",
+		) => {
+			callback(shape);
+		};
+		ipcRenderer.on("webcam-shape:changed", listener);
+		return () => ipcRenderer.removeListener("webcam-shape:changed", listener);
+	},
+	onWebcamPreviewDeviceChanged: (callback: (deviceId: string | undefined) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, deviceId: string | undefined) => {
+			callback(deviceId);
+		};
+		ipcRenderer.on("webcam-preview:device-changed", listener);
+		return () => ipcRenderer.removeListener("webcam-preview:device-changed", listener);
+	},
+	onDisableWebcamRequested: (callback: () => void) => {
+		const listener = () => callback();
+		ipcRenderer.on("webcam-preview:disable-webcam", listener);
+		return () => ipcRenderer.removeListener("webcam-preview:disable-webcam", listener);
+	},
 });
