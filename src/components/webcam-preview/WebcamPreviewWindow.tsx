@@ -1,0 +1,136 @@
+import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useWebcamShape } from "@/hooks/useWebcamShape";
+import { cn } from "@/lib/utils";
+import { getCssClipPath } from "@/lib/webcamMaskShapes";
+import { getPreviewAspectRatio } from "@/lib/webcamPreviewAspect";
+import { ShapeSelector } from "./ShapeSelector";
+
+type StreamState =
+	| { kind: "idle" }
+	| { kind: "ready"; stream: MediaStream; width: number; height: number }
+	| { kind: "error"; message: string };
+
+function getDeviceIdFromQuery(): string | undefined {
+	const params = new URLSearchParams(window.location.search);
+	const id = params.get("deviceId");
+	return id ?? undefined;
+}
+
+async function acquireStream(deviceId: string | undefined): Promise<MediaStream> {
+	const constraints: MediaStreamConstraints = {
+		audio: false,
+		video: deviceId
+			? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+			: { width: { ideal: 1280 }, height: { ideal: 720 } },
+	};
+	return navigator.mediaDevices.getUserMedia(constraints);
+}
+
+export function WebcamPreviewWindow() {
+	const videoRef = useRef<HTMLVideoElement>(null);
+	const [deviceId, setDeviceId] = useState<string | undefined>(() => getDeviceIdFromQuery());
+	const [streamState, setStreamState] = useState<StreamState>({ kind: "idle" });
+	const [hovering, setHovering] = useState(false);
+	const { shape, setShape } = useWebcamShape();
+
+	useEffect(() => {
+		let cancelled = false;
+		let localStream: MediaStream | null = null;
+
+		(async () => {
+			try {
+				const stream = await acquireStream(deviceId);
+				if (cancelled) {
+					stream.getTracks().forEach((t) => t.stop());
+					return;
+				}
+				localStream = stream;
+				const track = stream.getVideoTracks()[0];
+				const settings = track?.getSettings() ?? {};
+				const width = typeof settings.width === "number" ? settings.width : 1280;
+				const height = typeof settings.height === "number" ? settings.height : 720;
+
+				track?.addEventListener("ended", () => {
+					setStreamState({ kind: "error", message: "Camera disconnected" });
+				});
+
+				setStreamState({ kind: "ready", stream, width, height });
+				if (videoRef.current) {
+					videoRef.current.srcObject = stream;
+				}
+			} catch (error) {
+				const message = error instanceof Error ? error.message : "Camera unavailable";
+				setStreamState({ kind: "error", message });
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+			if (localStream) {
+				localStream.getTracks().forEach((t) => t.stop());
+			}
+		};
+	}, [deviceId]);
+
+	useEffect(() => {
+		const api = window.electronAPI;
+		if (!api) return;
+		return api.onWebcamPreviewDeviceChanged((next) => {
+			setDeviceId(next);
+		});
+	}, []);
+
+	useEffect(() => {
+		const api = window.electronAPI;
+		if (!api) return;
+		const nativeWidth = streamState.kind === "ready" ? streamState.width : 0;
+		const nativeHeight = streamState.kind === "ready" ? streamState.height : 0;
+		const ratio = getPreviewAspectRatio(shape, nativeWidth, nativeHeight);
+		api.setWebcamPreviewAspect(ratio);
+	}, [shape, streamState]);
+
+	const clipPath = getCssClipPath(shape) ?? "none";
+
+	return (
+		<div
+			style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+			className="relative h-screen w-screen overflow-hidden bg-transparent"
+			onMouseEnter={() => setHovering(true)}
+			onMouseLeave={() => setHovering(false)}
+		>
+			<div
+				className={cn(
+					"absolute inset-0 overflow-hidden bg-black",
+					shape === "circle" && "rounded-full",
+				)}
+				style={{ clipPath }}
+			>
+				{streamState.kind === "ready" && (
+					<video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
+				)}
+				{streamState.kind === "error" && (
+					<div className="flex h-full w-full items-center justify-center p-4 text-center text-sm text-white">
+						{streamState.message}
+					</div>
+				)}
+			</div>
+
+			<button
+				type="button"
+				aria-label="Close preview"
+				style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+				onClick={() => window.electronAPI?.requestCloseWebcamPreview()}
+				className={cn(
+					"absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full",
+					"bg-black/60 text-white transition-opacity",
+					hovering ? "opacity-100" : "opacity-0 pointer-events-none",
+				)}
+			>
+				<X size={12} />
+			</button>
+
+			<ShapeSelector value={shape} onChange={setShape} visible={hovering} />
+		</div>
+	);
+}
