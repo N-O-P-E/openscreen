@@ -68,8 +68,10 @@ import {
 	type PlaybackSpeed,
 	type SpeedRegion,
 	type TrimRegion,
+	type WebcamKeyframe,
+	type WebcamMaskShape,
 	type WebcamPosition,
-	type WebcamRegion,
+	type WebcamSizePreset,
 	type ZoomDepth,
 	type ZoomFocus,
 	type ZoomFocusMode,
@@ -104,7 +106,7 @@ export default function VideoEditor() {
 		webcamMaskShape,
 		webcamSizePreset,
 		webcamPosition,
-		webcamRegions,
+		webcamKeyframes,
 	} = editorState;
 
 	// ── Non-undoable state
@@ -128,7 +130,7 @@ export default function VideoEditor() {
 	const [selectedSpeedId, setSelectedSpeedId] = useState<string | null>(null);
 	const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
 	const [selectedBlurId, setSelectedBlurId] = useState<string | null>(null);
-	const [selectedWebcamRegionId, setSelectedWebcamRegionId] = useState<string | null>(null);
+	const [selectedWebcamKeyframeId, setSelectedWebcamKeyframeId] = useState<string | null>(null);
 	const [isExporting, setIsExporting] = useState(false);
 	const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
 	const [exportError, setExportError] = useState<string | null>(null);
@@ -154,7 +156,7 @@ export default function VideoEditor() {
 	const nextZoomIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
-	const nextWebcamRegionIdRef = useRef<number>(1);
+	const nextWebcamKeyframeIdRef = useRef<number>(1);
 
 	const { shortcuts, isMac } = useShortcuts();
 	const t = useScopedT("editor");
@@ -235,7 +237,7 @@ export default function VideoEditor() {
 				webcamMaskShape: normalizedEditor.webcamMaskShape,
 				webcamSizePreset: normalizedEditor.webcamSizePreset,
 				webcamPosition: normalizedEditor.webcamPosition,
-				webcamRegions: normalizedEditor.webcamRegions,
+				webcamKeyframes: normalizedEditor.webcamKeyframes,
 			});
 			setExportQuality(normalizedEditor.exportQuality);
 			setExportFormat(normalizedEditor.exportFormat);
@@ -248,7 +250,7 @@ export default function VideoEditor() {
 			setSelectedSpeedId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
-			setSelectedWebcamRegionId(null);
+			setSelectedWebcamKeyframeId(null);
 
 			nextZoomIdRef.current = deriveNextId(
 				"zoom",
@@ -266,9 +268,9 @@ export default function VideoEditor() {
 				"annotation",
 				normalizedEditor.annotationRegions.map((region) => region.id),
 			);
-			nextWebcamRegionIdRef.current = deriveNextId(
-				"webcam",
-				normalizedEditor.webcamRegions.map((region) => region.id),
+			nextWebcamKeyframeIdRef.current = deriveNextId(
+				"webcam-kf",
+				normalizedEditor.webcamKeyframes.map((kf) => kf.id),
 			);
 			nextAnnotationZIndexRef.current =
 				normalizedEditor.annotationRegions.reduce(
@@ -309,7 +311,7 @@ export default function VideoEditor() {
 			webcamLayoutPreset,
 			webcamMaskShape,
 			webcamPosition,
-			webcamRegions,
+			webcamKeyframes,
 			exportQuality,
 			exportFormat,
 			gifFrameRate,
@@ -334,7 +336,7 @@ export default function VideoEditor() {
 		webcamMaskShape,
 		webcamSizePreset,
 		webcamPosition,
-		webcamRegions,
+		webcamKeyframes,
 		exportQuality,
 		exportFormat,
 		gifFrameRate,
@@ -473,7 +475,7 @@ export default function VideoEditor() {
 				webcamMaskShape,
 				webcamSizePreset,
 				webcamPosition,
-				webcamRegions,
+				webcamKeyframes,
 				exportQuality,
 				exportFormat,
 				gifFrameRate,
@@ -530,7 +532,7 @@ export default function VideoEditor() {
 			webcamMaskShape,
 			webcamSizePreset,
 			webcamPosition,
-			webcamRegions,
+			webcamKeyframes,
 			exportQuality,
 			exportFormat,
 			gifFrameRate,
@@ -675,7 +677,7 @@ export default function VideoEditor() {
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
-			setSelectedWebcamRegionId(null);
+			setSelectedWebcamKeyframeId(null);
 		}
 	}, []);
 
@@ -685,7 +687,7 @@ export default function VideoEditor() {
 			setSelectedZoomId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
-			setSelectedWebcamRegionId(null);
+			setSelectedWebcamKeyframeId(null);
 		}
 	}, []);
 
@@ -695,7 +697,7 @@ export default function VideoEditor() {
 			setSelectedZoomId(null);
 			setSelectedTrimId(null);
 			setSelectedBlurId(null);
-			setSelectedWebcamRegionId(null);
+			setSelectedWebcamKeyframeId(null);
 		}
 	}, []);
 
@@ -706,7 +708,7 @@ export default function VideoEditor() {
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedSpeedId(null);
-			setSelectedWebcamRegionId(null);
+			setSelectedWebcamKeyframeId(null);
 		}
 	}, []);
 
@@ -872,12 +874,12 @@ export default function VideoEditor() {
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
-			setSelectedWebcamRegionId(null);
+			setSelectedWebcamKeyframeId(null);
 		}
 	}, []);
 
-	const handleSelectWebcamRegion = useCallback((id: string | null) => {
-		setSelectedWebcamRegionId(id);
+	const handleSelectWebcamKeyframe = useCallback((id: string | null) => {
+		setSelectedWebcamKeyframeId(id);
 		if (id) {
 			setSelectedZoomId(null);
 			setSelectedTrimId(null);
@@ -887,82 +889,102 @@ export default function VideoEditor() {
 		}
 	}, []);
 
-	const handleWebcamRegionAdded = useCallback(
-		(span: Span) => {
-			const newStart = Math.round(span.start);
-			const newEnd = Math.round(span.end);
-			const hasOverlap = webcamRegions.some(
-				(region) => newStart < region.endMs && newEnd > region.startMs,
-			);
-			if (hasOverlap) {
-				toast.error("Webcam regions cannot overlap");
+	const handleWebcamKeyframeAdded = useCallback(
+		(timeMs: number) => {
+			const roundedTime = Math.max(0, Math.round(timeMs));
+			if (webcamKeyframes.some((kf) => kf.timeMs === roundedTime)) {
+				toast.error("A webcam keyframe already exists at this time");
 				return;
 			}
-			const id = `webcam-${nextWebcamRegionIdRef.current++}`;
-			const basePosition = webcamPosition ?? { cx: 0.5, cy: 0.5 };
-			const newRegion: WebcamRegion = {
+			const id = `webcam-kf-${nextWebcamKeyframeIdRef.current++}`;
+			const newKeyframe: WebcamKeyframe = {
 				id,
-				startMs: newStart,
-				endMs: newEnd,
-				position: { ...basePosition },
+				timeMs: roundedTime,
+				position: webcamPosition ?? { cx: 0.5, cy: 0.5 },
+				shape: webcamMaskShape,
+				sizePreset: webcamSizePreset,
 			};
-			pushState((prev) => ({ webcamRegions: [...prev.webcamRegions, newRegion] }));
-			setSelectedWebcamRegionId(id);
+			pushState((prev) => ({ webcamKeyframes: [...prev.webcamKeyframes, newKeyframe] }));
+			setSelectedWebcamKeyframeId(id);
 			setSelectedZoomId(null);
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
 			setSelectedSpeedId(null);
 		},
-		[pushState, webcamPosition, webcamRegions],
+		[pushState, webcamKeyframes, webcamPosition, webcamMaskShape, webcamSizePreset],
 	);
 
-	const handleWebcamRegionSpanChange = useCallback(
-		(id: string, span: Span) => {
-			const newStart = Math.round(span.start);
-			const newEnd = Math.round(span.end);
-			const hasOverlap = webcamRegions.some(
-				(region) => region.id !== id && newStart < region.endMs && newEnd > region.startMs,
-			);
-			if (hasOverlap) return;
+	const handleWebcamKeyframeTimeChange = useCallback(
+		(id: string, timeMs: number) => {
+			const roundedTime = Math.max(0, Math.round(timeMs));
+			if (webcamKeyframes.some((kf) => kf.id !== id && kf.timeMs === roundedTime)) {
+				return;
+			}
 			pushState((prev) => ({
-				webcamRegions: prev.webcamRegions.map((region) =>
-					region.id === id ? { ...region, startMs: newStart, endMs: newEnd } : region,
+				webcamKeyframes: prev.webcamKeyframes.map((kf) =>
+					kf.id === id ? { ...kf, timeMs: roundedTime } : kf,
 				),
 			}));
 		},
-		[pushState, webcamRegions],
+		[pushState, webcamKeyframes],
 	);
 
-	const handleWebcamRegionPositionChange = useCallback(
+	const handleWebcamKeyframePositionChange = useCallback(
 		(id: string, position: WebcamPosition) => {
 			updateState((prev) => ({
-				webcamRegions: prev.webcamRegions.map((region) =>
-					region.id === id
+				webcamKeyframes: prev.webcamKeyframes.map((kf) =>
+					kf.id === id
 						? {
-								...region,
+								...kf,
 								position: {
 									cx: Math.max(0, Math.min(1, position.cx)),
 									cy: Math.max(0, Math.min(1, position.cy)),
 								},
 							}
-						: region,
+						: kf,
 				),
 			}));
 		},
 		[updateState],
 	);
 
-	const handleWebcamRegionDelete = useCallback(
+	const handleWebcamKeyframeShapeChange = useCallback(
+		(id: string, shape: WebcamMaskShape) => {
+			pushState((prev) => ({
+				webcamKeyframes: prev.webcamKeyframes.map((kf) => (kf.id === id ? { ...kf, shape } : kf)),
+			}));
+		},
+		[pushState],
+	);
+
+	const handleWebcamKeyframeSizeChange = useCallback(
+		(id: string, sizePreset: WebcamSizePreset) => {
+			pushState((prev) => ({
+				webcamKeyframes: prev.webcamKeyframes.map((kf) =>
+					kf.id === id ? { ...kf, sizePreset } : kf,
+				),
+			}));
+		},
+		[pushState],
+	);
+
+	// These handlers will be wired into SettingsPanel in a later phase so it
+	// can route shape/size edits to the currently selected webcam keyframe.
+	// Reference them here to satisfy noUnusedLocals until that wiring lands.
+	void handleWebcamKeyframeShapeChange;
+	void handleWebcamKeyframeSizeChange;
+
+	const handleWebcamKeyframeDelete = useCallback(
 		(id: string) => {
 			pushState((prev) => ({
-				webcamRegions: prev.webcamRegions.filter((r) => r.id !== id),
+				webcamKeyframes: prev.webcamKeyframes.filter((kf) => kf.id !== id),
 			}));
-			if (selectedWebcamRegionId === id) {
-				setSelectedWebcamRegionId(null);
+			if (selectedWebcamKeyframeId === id) {
+				setSelectedWebcamKeyframeId(null);
 			}
 		},
-		[selectedWebcamRegionId, pushState],
+		[selectedWebcamKeyframeId, pushState],
 	);
 
 	const handleSpeedAdded = useCallback(
@@ -1478,7 +1500,7 @@ export default function VideoEditor() {
 						webcamMaskShape,
 						webcamSizePreset,
 						webcamPosition,
-						webcamRegions,
+						webcamKeyframes,
 						previewWidth,
 						previewHeight,
 						cursorTelemetry,
@@ -1613,7 +1635,7 @@ export default function VideoEditor() {
 						webcamMaskShape,
 						webcamSizePreset,
 						webcamPosition,
-						webcamRegions,
+						webcamKeyframes,
 						previewWidth,
 						previewHeight,
 						cursorTelemetry,
@@ -1685,7 +1707,7 @@ export default function VideoEditor() {
 			webcamMaskShape,
 			webcamSizePreset,
 			webcamPosition,
-			webcamRegions,
+			webcamKeyframes,
 			exportQuality,
 			handleExportSaved,
 			cursorTelemetry,
@@ -1911,9 +1933,9 @@ export default function VideoEditor() {
 											webcamPosition={webcamPosition}
 											onWebcamPositionChange={(pos) => updateState({ webcamPosition: pos })}
 											onWebcamPositionDragEnd={commitState}
-											webcamRegions={webcamRegions}
-											selectedWebcamRegionId={selectedWebcamRegionId}
-											onWebcamRegionPositionChange={handleWebcamRegionPositionChange}
+											webcamKeyframes={webcamKeyframes}
+											selectedWebcamKeyframeId={selectedWebcamKeyframeId}
+											onWebcamKeyframePositionChange={handleWebcamKeyframePositionChange}
 											onDurationChange={setDuration}
 											onTimeUpdate={setCurrentTime}
 											currentTime={currentTime}
@@ -2011,12 +2033,12 @@ export default function VideoEditor() {
 									onBlurDelete={handleAnnotationDelete}
 									selectedBlurId={selectedBlurId}
 									onSelectBlur={handleSelectBlur}
-									webcamRegions={webcamRegions}
-									onWebcamRegionAdded={handleWebcamRegionAdded}
-									onWebcamRegionSpanChange={handleWebcamRegionSpanChange}
-									onWebcamRegionDelete={handleWebcamRegionDelete}
-									selectedWebcamRegionId={selectedWebcamRegionId}
-									onSelectWebcamRegion={handleSelectWebcamRegion}
+									webcamKeyframes={webcamKeyframes}
+									onWebcamKeyframeAdded={handleWebcamKeyframeAdded}
+									onWebcamKeyframeTimeChange={handleWebcamKeyframeTimeChange}
+									onWebcamKeyframeDelete={handleWebcamKeyframeDelete}
+									selectedWebcamKeyframeId={selectedWebcamKeyframeId}
+									onSelectWebcamKeyframe={handleSelectWebcamKeyframe}
 									aspectRatio={aspectRatio}
 									onAspectRatioChange={(ar) =>
 										pushState({
