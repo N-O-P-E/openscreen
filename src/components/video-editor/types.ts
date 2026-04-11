@@ -19,11 +19,12 @@ export interface WebcamPosition {
 	cy: number; // normalized vertical center (0-1)
 }
 
-export interface WebcamRegion {
+export interface WebcamKeyframe {
 	id: string;
-	startMs: number;
-	endMs: number;
+	timeMs: number;
 	position: WebcamPosition;
+	shape: WebcamMaskShape;
+	sizePreset: WebcamSizePreset;
 }
 
 export const DEFAULT_WEBCAM_POSITION: WebcamPosition | null = null;

@@ -26,10 +26,10 @@ import {
 	MIN_PLAYBACK_SPEED,
 	type SpeedRegion,
 	type TrimRegion,
+	type WebcamKeyframe,
 	type WebcamLayoutPreset,
 	type WebcamMaskShape,
 	type WebcamPosition,
-	type WebcamRegion,
 	type WebcamSizePreset,
 	type ZoomRegion,
 } from "./types";
@@ -56,7 +56,7 @@ export interface ProjectEditorState {
 	trimRegions: TrimRegion[];
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
-	webcamRegions: WebcamRegion[];
+	webcamKeyframes: WebcamKeyframe[];
 	aspectRatio: AspectRatio;
 	webcamLayoutPreset: WebcamLayoutPreset;
 	webcamMaskShape: WebcamMaskShape;
@@ -357,23 +357,39 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				})
 		: [];
 
-	const normalizedWebcamRegions: WebcamRegion[] = Array.isArray(editor.webcamRegions)
-		? editor.webcamRegions
-				.filter((region): region is WebcamRegion =>
-					Boolean(region && typeof region.id === "string"),
+	const normalizedWebcamKeyframes: WebcamKeyframe[] = Array.isArray(editor.webcamKeyframes)
+		? editor.webcamKeyframes
+				.filter((keyframe): keyframe is WebcamKeyframe =>
+					Boolean(keyframe && typeof keyframe.id === "string"),
 				)
-				.map((region) => {
-					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
-					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
-					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
-					const endMs = Math.max(startMs + 1, rawEnd);
-					const cx = clamp(isFiniteNumber(region.position?.cx) ? region.position.cx : 0.5, 0, 1);
-					const cy = clamp(isFiniteNumber(region.position?.cy) ? region.position.cy : 0.5, 0, 1);
+				.map((keyframe) => {
+					const timeMs = Math.max(
+						0,
+						isFiniteNumber(keyframe.timeMs) ? Math.round(keyframe.timeMs) : 0,
+					);
+					const cx = clamp(
+						isFiniteNumber(keyframe.position?.cx) ? keyframe.position.cx : 0.5,
+						0,
+						1,
+					);
+					const cy = clamp(
+						isFiniteNumber(keyframe.position?.cy) ? keyframe.position.cy : 0.5,
+						0,
+						1,
+					);
+					const allowedShapes: WebcamMaskShape[] = ["rectangle", "circle", "square", "rounded"];
+					const shape: WebcamMaskShape = allowedShapes.includes(keyframe.shape as WebcamMaskShape)
+						? (keyframe.shape as WebcamMaskShape)
+						: DEFAULT_WEBCAM_MASK_SHAPE;
+					const rawSize = isFiniteNumber(keyframe.sizePreset) ? keyframe.sizePreset : null;
+					const sizePreset: WebcamSizePreset =
+						rawSize !== null ? clamp(rawSize, 10, 50) : DEFAULT_WEBCAM_SIZE_PRESET;
 					return {
-						id: region.id,
-						startMs,
-						endMs,
+						id: keyframe.id,
+						timeMs,
 						position: { cx, cy },
+						shape,
+						sizePreset,
 					};
 				})
 		: [];
@@ -419,7 +435,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		trimRegions: normalizedTrimRegions,
 		speedRegions: normalizedSpeedRegions,
 		annotationRegions: normalizedAnnotationRegions,
-		webcamRegions: normalizedWebcamRegions,
+		webcamKeyframes: normalizedWebcamKeyframes,
 		aspectRatio:
 			editor.aspectRatio && validAspectRatios.has(editor.aspectRatio) ? editor.aspectRatio : "16:9",
 		webcamLayoutPreset:
