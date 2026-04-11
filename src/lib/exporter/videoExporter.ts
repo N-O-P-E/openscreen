@@ -3,8 +3,8 @@ import type {
 	CropRegion,
 	SpeedRegion,
 	TrimRegion,
+	WebcamKeyframe,
 	WebcamLayoutPreset,
-	WebcamRegion,
 	WebcamSizePreset,
 	ZoomRegion,
 } from "@/components/video-editor/types";
@@ -37,7 +37,7 @@ interface VideoExporterConfig extends ExportConfig {
 	webcamMaskShape?: import("@/components/video-editor/types").WebcamMaskShape;
 	webcamSizePreset?: WebcamSizePreset;
 	webcamPosition?: { cx: number; cy: number } | null;
-	webcamRegions?: WebcamRegion[];
+	webcamKeyframes?: WebcamKeyframe[];
 	annotationRegions?: AnnotationRegion[];
 	previewWidth?: number;
 	previewHeight?: number;
@@ -143,7 +143,7 @@ export class VideoExporter {
 				webcamMaskShape: this.config.webcamMaskShape,
 				webcamSizePreset: this.config.webcamSizePreset,
 				webcamPosition: this.config.webcamPosition,
-				webcamRegions: this.config.webcamRegions,
+				webcamKeyframes: this.config.webcamKeyframes,
 				annotationRegions: this.config.annotationRegions,
 				speedRegions: this.config.speedRegions,
 				previewWidth: this.config.previewWidth,

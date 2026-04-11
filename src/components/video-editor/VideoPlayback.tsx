@@ -36,10 +36,13 @@ import { AnnotationOverlay } from "./AnnotationOverlay";
 import {
 	type AnnotationRegion,
 	type BlurData,
+	DEFAULT_WEBCAM_MASK_SHAPE,
+	DEFAULT_WEBCAM_SIZE_PRESET,
 	type SpeedRegion,
 	type TrimRegion,
+	type WebcamKeyframe,
+	type WebcamMaskShape,
 	type WebcamPosition,
-	type WebcamRegion,
 	ZOOM_DEPTH_SCALES,
 	type ZoomDepth,
 	type ZoomFocus,
@@ -59,7 +62,7 @@ import { layoutVideoContent as layoutVideoContentUtil } from "./videoPlayback/la
 import { clamp01 } from "./videoPlayback/mathUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { createVideoEventHandlers } from "./videoPlayback/videoEventHandlers";
-import { computeWebcamPositionAtTime } from "./videoPlayback/webcamRegionUtils";
+import { computeWebcamStateAtTime } from "./videoPlayback/webcamKeyframeUtils";
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
@@ -73,14 +76,14 @@ interface VideoPlaybackProps {
 	videoPath: string;
 	webcamVideoPath?: string;
 	webcamLayoutPreset: WebcamLayoutPreset;
-	webcamMaskShape?: import("./types").WebcamMaskShape;
+	webcamMaskShape?: WebcamMaskShape;
 	webcamSizePreset?: WebcamSizePreset;
 	webcamPosition?: { cx: number; cy: number } | null;
 	onWebcamPositionChange?: (position: { cx: number; cy: number }) => void;
 	onWebcamPositionDragEnd?: () => void;
-	webcamRegions?: WebcamRegion[];
-	selectedWebcamRegionId?: string | null;
-	onWebcamRegionPositionChange?: (id: string, position: WebcamPosition) => void;
+	webcamKeyframes?: WebcamKeyframe[];
+	selectedWebcamKeyframeId?: string | null;
+	onWebcamKeyframePositionChange?: (id: string, position: WebcamPosition) => void;
 	onDurationChange: (duration: number) => void;
 	onTimeUpdate: (time: number) => void;
 	currentTime: number;
@@ -139,9 +142,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			webcamPosition,
 			onWebcamPositionChange,
 			onWebcamPositionDragEnd,
-			webcamRegions = [],
-			selectedWebcamRegionId,
-			onWebcamRegionPositionChange,
+			webcamKeyframes = [],
+			selectedWebcamKeyframeId,
+			onWebcamKeyframePositionChange,
 			onDurationChange,
 			onTimeUpdate,
 			currentTime,
@@ -272,14 +275,23 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			[],
 		);
 
-		const effectiveWebcamPosition = useMemo(
+		const effectiveWebcamState = useMemo(
 			() =>
-				computeWebcamPositionAtTime(
-					{ globalPosition: webcamPosition ?? null, regions: webcamRegions },
+				computeWebcamStateAtTime(
+					{
+						globalPosition: webcamPosition ?? null,
+						globalShape: webcamMaskShape ?? DEFAULT_WEBCAM_MASK_SHAPE,
+						globalSizePreset: webcamSizePreset ?? DEFAULT_WEBCAM_SIZE_PRESET,
+						keyframes: webcamKeyframes,
+					},
 					currentTime * 1000,
 				),
-			[webcamPosition, webcamRegions, currentTime],
+			[webcamPosition, webcamMaskShape, webcamSizePreset, webcamKeyframes, currentTime],
 		);
+
+		const effectiveWebcamPosition = effectiveWebcamState.position;
+		const effectiveWebcamShape = effectiveWebcamState.shape;
+		const effectiveWebcamSizePreset = effectiveWebcamState.sizePreset;
 
 		const layoutVideoContent = useCallback(() => {
 			const container = containerRef.current;
@@ -324,9 +336,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				padding,
 				webcamDimensions,
 				webcamLayoutPreset,
-				webcamSizePreset,
+				webcamSizePreset: effectiveWebcamSizePreset,
 				webcamPosition: effectiveWebcamPosition,
-				webcamMaskShape,
+				webcamMaskShape: effectiveWebcamShape,
 			});
 
 			if (result) {
@@ -356,9 +368,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			padding,
 			webcamDimensions,
 			webcamLayoutPreset,
-			webcamSizePreset,
+			effectiveWebcamSizePreset,
 			effectiveWebcamPosition,
-			webcamMaskShape,
+			effectiveWebcamShape,
 		]);
 
 		useEffect(() => {
@@ -508,8 +520,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				(event.clientY - webcamDragOffsetRef.current.dy - containerRect.top) / containerRect.height,
 			);
 			const newPos = { cx, cy };
-			if (selectedWebcamRegionId && onWebcamRegionPositionChange) {
-				onWebcamRegionPositionChange(selectedWebcamRegionId, newPos);
+			if (selectedWebcamKeyframeId && onWebcamKeyframePositionChange) {
+				onWebcamKeyframePositionChange(selectedWebcamKeyframeId, newPos);
 			} else if (onWebcamPositionChange) {
 				onWebcamPositionChange(newPos);
 			}

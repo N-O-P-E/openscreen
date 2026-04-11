@@ -12,13 +12,17 @@ import type {
 	AnnotationRegion,
 	CropRegion,
 	SpeedRegion,
+	WebcamKeyframe,
 	WebcamLayoutPreset,
-	WebcamRegion,
 	WebcamSizePreset,
 	ZoomDepth,
 	ZoomRegion,
 } from "@/components/video-editor/types";
-import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
+import {
+	DEFAULT_WEBCAM_MASK_SHAPE,
+	DEFAULT_WEBCAM_SIZE_PRESET,
+	ZOOM_DEPTH_SCALES,
+} from "@/components/video-editor/types";
 import {
 	AUTO_FOLLOW_RAMP_DISTANCE,
 	AUTO_FOLLOW_SMOOTHING_FACTOR,
@@ -32,7 +36,7 @@ import {
 	smoothCursorFocus,
 } from "@/components/video-editor/videoPlayback/cursorFollowUtils";
 import { clampFocusToStage as clampFocusToStageUtil } from "@/components/video-editor/videoPlayback/focusUtils";
-import { computeWebcamPositionAtTime } from "@/components/video-editor/videoPlayback/webcamRegionUtils";
+import { computeWebcamStateAtTime } from "@/components/video-editor/videoPlayback/webcamKeyframeUtils";
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
@@ -75,7 +79,7 @@ interface FrameRenderConfig {
 	webcamMaskShape?: import("@/components/video-editor/types").WebcamMaskShape;
 	webcamSizePreset?: WebcamSizePreset;
 	webcamPosition?: { cx: number; cy: number } | null;
-	webcamRegions?: WebcamRegion[];
+	webcamKeyframes?: WebcamKeyframe[];
 	annotationRegions?: AnnotationRegion[];
 	speedRegions?: SpeedRegion[];
 	previewWidth?: number;
@@ -463,22 +467,27 @@ export class FrameRenderer {
 		const viewportWidth = width * paddingScale;
 		const viewportHeight = height * paddingScale;
 		const timeMs = this.currentVideoTime * 1000;
-		const effectiveWebcamPosition = computeWebcamPositionAtTime(
+		const webcamState = computeWebcamStateAtTime(
 			{
 				globalPosition: this.config.webcamPosition ?? null,
-				regions: this.config.webcamRegions ?? [],
+				globalShape: this.config.webcamMaskShape ?? DEFAULT_WEBCAM_MASK_SHAPE,
+				globalSizePreset: this.config.webcamSizePreset ?? DEFAULT_WEBCAM_SIZE_PRESET,
+				keyframes: this.config.webcamKeyframes ?? [],
 			},
 			timeMs,
 		);
+		const effectiveWebcamPosition = webcamState.position;
+		const effectiveWebcamShape = webcamState.shape;
+		const effectiveWebcamSizePreset = webcamState.sizePreset;
 		const compositeLayout = computeCompositeLayout({
 			canvasSize: { width, height },
 			maxContentSize: { width: viewportWidth, height: viewportHeight },
 			screenSize: { width: croppedVideoWidth, height: croppedVideoHeight },
 			webcamSize: webcamFrame ? this.config.webcamSize : null,
 			layoutPreset: this.config.webcamLayoutPreset,
-			webcamSizePreset: this.config.webcamSizePreset,
+			webcamSizePreset: effectiveWebcamSizePreset,
 			webcamPosition: effectiveWebcamPosition,
-			webcamMaskShape: this.config.webcamMaskShape,
+			webcamMaskShape: effectiveWebcamShape,
 		});
 		if (!compositeLayout) return;
 
