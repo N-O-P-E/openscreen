@@ -31,7 +31,6 @@ export function WebcamPreviewWindow() {
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const [deviceId, setDeviceId] = useState<string | undefined>(() => getDeviceIdFromQuery());
 	const [streamState, setStreamState] = useState<StreamState>({ kind: "idle" });
-	const [hovering, setHovering] = useState(false);
 	const { shape, setShape } = useWebcamShape();
 
 	useEffect(() => {
@@ -56,9 +55,6 @@ export function WebcamPreviewWindow() {
 				});
 
 				setStreamState({ kind: "ready", stream, width, height });
-				if (videoRef.current) {
-					videoRef.current.srcObject = stream;
-				}
 			} catch (error) {
 				const message = error instanceof Error ? error.message : "Camera unavailable";
 				setStreamState({ kind: "error", message });
@@ -72,6 +68,13 @@ export function WebcamPreviewWindow() {
 			}
 		};
 	}, [deviceId]);
+
+	useEffect(() => {
+		if (streamState.kind !== "ready") return;
+		const video = videoRef.current;
+		if (!video) return;
+		video.srcObject = streamState.stream;
+	}, [streamState]);
 
 	useEffect(() => {
 		const api = window.electronAPI;
@@ -97,11 +100,7 @@ export function WebcamPreviewWindow() {
 	const clipPath = getCssClipPath(shape) ?? "none";
 
 	return (
-		<div
-			className="relative h-screen w-screen overflow-hidden bg-transparent"
-			onMouseEnter={() => setHovering(true)}
-			onMouseLeave={() => setHovering(false)}
-		>
+		<div className="group relative h-screen w-screen overflow-hidden bg-transparent">
 			<div
 				className={cn(
 					"absolute inset-0 overflow-hidden bg-black",
@@ -127,13 +126,18 @@ export function WebcamPreviewWindow() {
 				className={cn(
 					"absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full",
 					"bg-black/60 text-white transition-opacity",
-					hovering ? "opacity-100" : "opacity-0 pointer-events-none",
+					"opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto",
 				)}
 			>
 				<X size={12} />
 			</button>
 
-			<ShapeSelector value={shape} onChange={setShape} visible={hovering} />
+			<ShapeSelector value={shape} onChange={setShape} />
+
+			<div
+				aria-hidden
+				className="absolute inset-0 pointer-events-none rounded-2xl border-2 border-white/30 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+			/>
 		</div>
 	);
 }
