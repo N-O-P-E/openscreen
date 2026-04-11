@@ -174,6 +174,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		async (enabled: boolean) => {
 			if (!enabled) {
 				setWebcamEnabledState(false);
+				window.electronAPI?.closeWebcamPreview();
 				return true;
 			}
 
@@ -189,9 +190,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 
 			setWebcamEnabledState(true);
+			window.electronAPI?.openWebcamPreview(webcamDeviceId);
 			return true;
 		},
-		[t],
+		[t, webcamDeviceId],
 	);
 
 	const finalizeRecording = useCallback(
@@ -364,6 +366,25 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			teardownMedia();
 		};
 	}, [teardownMedia]);
+
+	useEffect(() => {
+		if (!webcamEnabled) return;
+		window.electronAPI?.setWebcamPreviewDevice(webcamDeviceId);
+	}, [webcamEnabled, webcamDeviceId]);
+
+	useEffect(() => {
+		const api = window.electronAPI;
+		if (!api) return;
+		return api.onDisableWebcamRequested(() => {
+			setWebcamEnabledState(false);
+		});
+	}, []);
+
+	useEffect(() => {
+		return () => {
+			window.electronAPI?.closeWebcamPreview();
+		};
+	}, []);
 
 	const startRecording = async () => {
 		try {
