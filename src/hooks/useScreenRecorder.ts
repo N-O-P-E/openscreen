@@ -482,6 +482,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						webcamStream.current = null;
 					}
 					setWebcamEnabledState(false);
+					window.electronAPI?.closeWebcamPreview();
 					toast.error(t("recording.cameraDenied"));
 				}
 			}
