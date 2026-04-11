@@ -823,8 +823,39 @@ export class FrameRenderer {
 			ctx.fillStyle = "#000000";
 			ctx.fill();
 			ctx.clip();
+			// Apply object-cover logic so the webcam source is cropped (not stretched)
+			// to fill the destination rect. This mirrors the editor preview, which uses
+			// CSS `object-fit: cover` on the <video> element. Without this, a 16:9 source
+			// drawn into a square (circle/square mask) gets squished, distorting the face.
+			const srcWidth = webcamFrame.displayWidth || webcamFrame.codedWidth;
+			const srcHeight = webcamFrame.displayHeight || webcamFrame.codedHeight;
+			let sx = 0;
+			let sy = 0;
+			let sw = srcWidth;
+			let sh = srcHeight;
+			if (srcWidth > 0 && srcHeight > 0 && webcamRect.width > 0 && webcamRect.height > 0) {
+				const imageAspect = srcWidth / srcHeight;
+				const rectAspect = webcamRect.width / webcamRect.height;
+				if (imageAspect > rectAspect) {
+					// Source is wider than destination — crop left/right
+					sh = srcHeight;
+					sw = sh * rectAspect;
+					sx = (srcWidth - sw) / 2;
+					sy = 0;
+				} else {
+					// Source is taller than destination — crop top/bottom
+					sw = srcWidth;
+					sh = sw / rectAspect;
+					sx = 0;
+					sy = (srcHeight - sh) / 2;
+				}
+			}
 			ctx.drawImage(
 				webcamFrame as unknown as CanvasImageSource,
+				sx,
+				sy,
+				sw,
+				sh,
 				webcamRect.x,
 				webcamRect.y,
 				webcamRect.width,
