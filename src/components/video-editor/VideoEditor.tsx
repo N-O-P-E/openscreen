@@ -357,12 +357,29 @@ export default function VideoEditor() {
 					setWebcamVideoSourcePath(webcamSourcePath);
 					setWebcamVideoPath(webcamSourcePath ? toFileUrl(webcamSourcePath) : null);
 					setCurrentProjectPath(null);
+
+					let initialShape = INITIAL_EDITOR_STATE.webcamMaskShape;
+					try {
+						const shape = await window.electronAPI.getWebcamShape();
+						if (
+							shape === "rectangle" ||
+							shape === "circle" ||
+							shape === "square" ||
+							shape === "rounded"
+						) {
+							initialShape = shape;
+							pushState({ webcamMaskShape: shape });
+						}
+					} catch (shapeError) {
+						console.warn("Failed to read webcam shape preference:", shapeError);
+					}
+
 					setLastSavedSnapshot(
 						createProjectSnapshot(
 							webcamSourcePath
 								? { screenVideoPath: sourcePath, webcamVideoPath: webcamSourcePath }
 								: { screenVideoPath: sourcePath },
-							INITIAL_EDITOR_STATE,
+							{ ...INITIAL_EDITOR_STATE, webcamMaskShape: initialShape },
 						),
 					);
 					return;
@@ -390,7 +407,7 @@ export default function VideoEditor() {
 		}
 
 		loadInitialData();
-	}, [applyLoadedProject]);
+	}, [applyLoadedProject, pushState]);
 
 	// Track whether user preferences have been loaded to avoid
 	// overwriting saved prefs with defaults on the first render
