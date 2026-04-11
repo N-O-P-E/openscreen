@@ -19,6 +19,13 @@ export interface WebcamPosition {
 	cy: number; // normalized vertical center (0-1)
 }
 
+export interface WebcamRegion {
+	id: string;
+	startMs: number;
+	endMs: number;
+	position: WebcamPosition;
+}
+
 export const DEFAULT_WEBCAM_POSITION: WebcamPosition | null = null;
 
 export interface ZoomFocus {
