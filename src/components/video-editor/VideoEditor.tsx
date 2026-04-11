@@ -68,6 +68,8 @@ import {
 	type PlaybackSpeed,
 	type SpeedRegion,
 	type TrimRegion,
+	type WebcamPosition,
+	type WebcamRegion,
 	type ZoomDepth,
 	type ZoomFocus,
 	type ZoomFocusMode,
@@ -102,6 +104,7 @@ export default function VideoEditor() {
 		webcamMaskShape,
 		webcamSizePreset,
 		webcamPosition,
+		webcamRegions,
 	} = editorState;
 
 	// ── Non-undoable state
@@ -125,6 +128,7 @@ export default function VideoEditor() {
 	const [selectedSpeedId, setSelectedSpeedId] = useState<string | null>(null);
 	const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
 	const [selectedBlurId, setSelectedBlurId] = useState<string | null>(null);
+	const [selectedWebcamRegionId, setSelectedWebcamRegionId] = useState<string | null>(null);
 	const [isExporting, setIsExporting] = useState(false);
 	const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
 	const [exportError, setExportError] = useState<string | null>(null);
@@ -150,6 +154,7 @@ export default function VideoEditor() {
 	const nextZoomIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
+	const nextWebcamRegionIdRef = useRef<number>(1);
 
 	const { shortcuts, isMac } = useShortcuts();
 	const t = useScopedT("editor");
@@ -230,6 +235,7 @@ export default function VideoEditor() {
 				webcamMaskShape: normalizedEditor.webcamMaskShape,
 				webcamSizePreset: normalizedEditor.webcamSizePreset,
 				webcamPosition: normalizedEditor.webcamPosition,
+				webcamRegions: normalizedEditor.webcamRegions,
 			});
 			setExportQuality(normalizedEditor.exportQuality);
 			setExportFormat(normalizedEditor.exportFormat);
@@ -242,6 +248,7 @@ export default function VideoEditor() {
 			setSelectedSpeedId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
+			setSelectedWebcamRegionId(null);
 
 			nextZoomIdRef.current = deriveNextId(
 				"zoom",
@@ -258,6 +265,10 @@ export default function VideoEditor() {
 			nextAnnotationIdRef.current = deriveNextId(
 				"annotation",
 				normalizedEditor.annotationRegions.map((region) => region.id),
+			);
+			nextWebcamRegionIdRef.current = deriveNextId(
+				"webcam",
+				normalizedEditor.webcamRegions.map((region) => region.id),
 			);
 			nextAnnotationZIndexRef.current =
 				normalizedEditor.annotationRegions.reduce(
@@ -298,6 +309,7 @@ export default function VideoEditor() {
 			webcamLayoutPreset,
 			webcamMaskShape,
 			webcamPosition,
+			webcamRegions,
 			exportQuality,
 			exportFormat,
 			gifFrameRate,
@@ -322,6 +334,7 @@ export default function VideoEditor() {
 		webcamMaskShape,
 		webcamSizePreset,
 		webcamPosition,
+		webcamRegions,
 		exportQuality,
 		exportFormat,
 		gifFrameRate,
@@ -460,6 +473,7 @@ export default function VideoEditor() {
 				webcamMaskShape,
 				webcamSizePreset,
 				webcamPosition,
+				webcamRegions,
 				exportQuality,
 				exportFormat,
 				gifFrameRate,
@@ -516,6 +530,7 @@ export default function VideoEditor() {
 			webcamMaskShape,
 			webcamSizePreset,
 			webcamPosition,
+			webcamRegions,
 			exportQuality,
 			exportFormat,
 			gifFrameRate,
@@ -660,6 +675,7 @@ export default function VideoEditor() {
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
+			setSelectedWebcamRegionId(null);
 		}
 	}, []);
 
@@ -669,6 +685,7 @@ export default function VideoEditor() {
 			setSelectedZoomId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
+			setSelectedWebcamRegionId(null);
 		}
 	}, []);
 
@@ -678,6 +695,7 @@ export default function VideoEditor() {
 			setSelectedZoomId(null);
 			setSelectedTrimId(null);
 			setSelectedBlurId(null);
+			setSelectedWebcamRegionId(null);
 		}
 	}, []);
 
@@ -688,6 +706,7 @@ export default function VideoEditor() {
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedSpeedId(null);
+			setSelectedWebcamRegionId(null);
 		}
 	}, []);
 
@@ -853,8 +872,103 @@ export default function VideoEditor() {
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
+			setSelectedWebcamRegionId(null);
 		}
 	}, []);
+
+	// biome-ignore lint/correctness/noUnusedVariables: wired to TimelineEditor in a later task
+	const handleSelectWebcamRegion = useCallback((id: string | null) => {
+		setSelectedWebcamRegionId(id);
+		if (id) {
+			setSelectedZoomId(null);
+			setSelectedTrimId(null);
+			setSelectedAnnotationId(null);
+			setSelectedBlurId(null);
+			setSelectedSpeedId(null);
+		}
+	}, []);
+
+	// biome-ignore lint/correctness/noUnusedVariables: wired to TimelineEditor in a later task
+	const handleWebcamRegionAdded = useCallback(
+		(span: Span) => {
+			const newStart = Math.round(span.start);
+			const newEnd = Math.round(span.end);
+			const hasOverlap = webcamRegions.some(
+				(region) => newStart < region.endMs && newEnd > region.startMs,
+			);
+			if (hasOverlap) {
+				toast.error("Webcam regions cannot overlap");
+				return;
+			}
+			const id = `webcam-${nextWebcamRegionIdRef.current++}`;
+			const basePosition = webcamPosition ?? { cx: 0.5, cy: 0.5 };
+			const newRegion: WebcamRegion = {
+				id,
+				startMs: newStart,
+				endMs: newEnd,
+				position: { ...basePosition },
+			};
+			pushState((prev) => ({ webcamRegions: [...prev.webcamRegions, newRegion] }));
+			setSelectedWebcamRegionId(id);
+			setSelectedZoomId(null);
+			setSelectedTrimId(null);
+			setSelectedAnnotationId(null);
+			setSelectedBlurId(null);
+			setSelectedSpeedId(null);
+		},
+		[pushState, webcamPosition, webcamRegions],
+	);
+
+	// biome-ignore lint/correctness/noUnusedVariables: wired to TimelineEditor in a later task
+	const handleWebcamRegionSpanChange = useCallback(
+		(id: string, span: Span) => {
+			const newStart = Math.round(span.start);
+			const newEnd = Math.round(span.end);
+			const hasOverlap = webcamRegions.some(
+				(region) => region.id !== id && newStart < region.endMs && newEnd > region.startMs,
+			);
+			if (hasOverlap) return;
+			pushState((prev) => ({
+				webcamRegions: prev.webcamRegions.map((region) =>
+					region.id === id ? { ...region, startMs: newStart, endMs: newEnd } : region,
+				),
+			}));
+		},
+		[pushState, webcamRegions],
+	);
+
+	// biome-ignore lint/correctness/noUnusedVariables: wired to TimelineEditor in a later task
+	const handleWebcamRegionPositionChange = useCallback(
+		(id: string, position: WebcamPosition) => {
+			updateState((prev) => ({
+				webcamRegions: prev.webcamRegions.map((region) =>
+					region.id === id
+						? {
+								...region,
+								position: {
+									cx: Math.max(0, Math.min(1, position.cx)),
+									cy: Math.max(0, Math.min(1, position.cy)),
+								},
+							}
+						: region,
+				),
+			}));
+		},
+		[updateState],
+	);
+
+	// biome-ignore lint/correctness/noUnusedVariables: wired to TimelineEditor in a later task
+	const handleWebcamRegionDelete = useCallback(
+		(id: string) => {
+			pushState((prev) => ({
+				webcamRegions: prev.webcamRegions.filter((r) => r.id !== id),
+			}));
+			if (selectedWebcamRegionId === id) {
+				setSelectedWebcamRegionId(null);
+			}
+		},
+		[selectedWebcamRegionId, pushState],
+	);
 
 	const handleSpeedAdded = useCallback(
 		(span: Span) => {
