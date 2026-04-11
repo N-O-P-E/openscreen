@@ -5,14 +5,16 @@
 		"addTrim": "Ajouter une coupe (T)",
 		"addAnnotation": "Ajouter une annotation (A)",
 		"addSpeed": "Ajouter une vitesse (S)",
-		"addBlur": "Ajouter un flou (B)"
+		"addBlur": "Ajouter un flou (B)",
+		"addWebcam": "Ajouter une zone de webcam (W)"
 	},
 	"hints": {
 		"pressZoom": "Appuyez sur Z pour ajouter un zoom",
 		"pressTrim": "Appuyez sur T pour ajouter une coupe",
 		"pressAnnotation": "Appuyez sur A pour ajouter une annotation",
 		"pressSpeed": "Appuyez sur S pour ajouter une vitesse",
-		"pressBlur": "Appuyez sur B pour ajouter une zone de flou"
+		"pressBlur": "Appuyez sur B pour ajouter une zone de flou",
+		"pressWebcam": "Appuyez sur W pour ajouter une webcam"
 	},
 	"labels": {
 		"pan": "Panoramique",
@@ -23,7 +25,8 @@
 		"annotationItem": "Annotation",
 		"imageItem": "Image",
 		"emptyText": "Texte vide",
-		"blurItem": "Flou {{index}}"
+		"blurItem": "Flou {{index}}",
+		"webcamItem": "Cam {{index}}"
 	},
 	"emptyState": {
 		"noVideo": "Aucune vidéo chargée",
@@ -44,7 +47,9 @@
 		"cannotPlaceTrim": "Impossible de placer la coupe ici",
 		"trimExistsAtLocation": "Une coupe existe déjà à cet emplacement ou l\u0027espace disponible est insuffisant.",
 		"cannotPlaceSpeed": "Impossible de placer la vitesse ici",
-		"speedExistsAtLocation": "Une région de vitesse existe déjà à cet emplacement ou l\u0027espace disponible est insuffisant."
+		"speedExistsAtLocation": "Une région de vitesse existe déjà à cet emplacement ou l\u0027espace disponible est insuffisant.",
+		"cannotPlaceWebcam": "Impossible de placer la zone de webcam",
+		"webcamExistsAtLocation": "Une zone de webcam existe déjà à la tête de lecture."
 	},
 	"success": {
 		"addedZoomSuggestions": "{{count}} suggestion de zoom basée sur le curseur ajoutée",
