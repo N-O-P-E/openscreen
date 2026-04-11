@@ -151,9 +151,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	setWebcamPreviewDevice: (deviceId: string | undefined) => {
 		ipcRenderer.send("webcam-preview:set-device", deviceId);
 	},
-	setWebcamPreviewAspect: (ratio: number) => {
-		ipcRenderer.send("webcam-preview:set-aspect", ratio);
-	},
 	requestCloseWebcamPreview: () => {
 		ipcRenderer.send("webcam-preview:request-close");
 	},

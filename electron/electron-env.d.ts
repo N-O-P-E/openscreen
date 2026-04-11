@@ -142,7 +142,6 @@ interface Window {
 		openWebcamPreview: (deviceId: string | undefined) => void;
 		closeWebcamPreview: () => void;
 		setWebcamPreviewDevice: (deviceId: string | undefined) => void;
-		setWebcamPreviewAspect: (ratio: number) => void;
 		requestCloseWebcamPreview: () => void;
 		setWebcamPreviewPosition: (x: number, y: number) => void;
 		setWebcamPreviewSize: (width: number, height: number) => void;

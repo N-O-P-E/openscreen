@@ -167,7 +167,6 @@ export function WebcamPreviewWindow() {
 		}
 
 		const ratio = getPreviewAspectRatio(shape, nativeWidth, nativeHeight);
-		api.setWebcamPreviewAspect(ratio);
 
 		let newWidth = window.innerWidth;
 		let newHeight = newWidth / ratio;

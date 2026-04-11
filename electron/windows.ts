@@ -179,10 +179,6 @@ export function createWebcamPreviewWindow(deviceId: string | undefined): Browser
 	const win = new BrowserWindow({
 		width: windowWidth,
 		height: windowHeight,
-		minWidth: 180,
-		minHeight: 180,
-		maxWidth: 960,
-		maxHeight: 960,
 		x,
 		y,
 		frame: false,
@@ -200,8 +196,6 @@ export function createWebcamPreviewWindow(deviceId: string | undefined): Browser
 			backgroundThrottling: false,
 		},
 	});
-
-	win.setAspectRatio(1);
 
 	webcamPreviewWindow = win;
 

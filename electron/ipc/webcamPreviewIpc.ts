@@ -74,13 +74,6 @@ export function registerWebcamPreviewLifecycleIpc(options: {
 		}
 	});
 
-	ipcMain.on("webcam-preview:set-aspect", (_event, ratio: number) => {
-		const win = getWebcamPreviewWindow();
-		if (!win || win.isDestroyed()) return;
-		if (typeof ratio !== "number" || !Number.isFinite(ratio) || ratio <= 0) return;
-		win.setAspectRatio(ratio);
-	});
-
 	ipcMain.on("webcam-preview:request-close", () => {
 		options.onRequestDisableWebcam();
 		const win = getWebcamPreviewWindow();
