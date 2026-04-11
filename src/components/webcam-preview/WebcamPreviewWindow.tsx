@@ -89,6 +89,15 @@ export function WebcamPreviewWindow() {
 			newHeight = 180;
 			newWidth = newHeight * resize.aspectRatio;
 		}
+		console.log("[resize grip]", {
+			dx,
+			screenX: event.screenX,
+			startMouseX: resize.startMouseX,
+			newWidth,
+			newHeight,
+			currentInnerWidth: window.innerWidth,
+			currentInnerHeight: window.innerHeight,
+		});
 		window.electronAPI?.setWebcamPreviewSize(newWidth, newHeight);
 	};
 
@@ -186,6 +195,15 @@ export function WebcamPreviewWindow() {
 			newWidth = 960;
 			newHeight = newWidth / ratio;
 		}
+		console.log("[shape-sync]", {
+			shape,
+			streamKind: streamState.kind,
+			ratio,
+			newWidth,
+			newHeight,
+			currentInnerWidth: window.innerWidth,
+			currentInnerHeight: window.innerHeight,
+		});
 		api.setWebcamPreviewSize(newWidth, newHeight);
 	}, [shape, streamState]);
 

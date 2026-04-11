@@ -215,5 +215,9 @@ export function createWebcamPreviewWindow(deviceId: string | undefined): Browser
 		win.loadFile(path.join(RENDERER_DIST, "index.html"), { query });
 	}
 
+	if (VITE_DEV_SERVER_URL) {
+		win.webContents.openDevTools({ mode: "detach" });
+	}
+
 	return win;
 }
