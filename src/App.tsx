@@ -5,6 +5,7 @@ import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { ShortcutsConfigDialog } from "./components/video-editor/ShortcutsConfigDialog";
 import VideoEditor from "./components/video-editor/VideoEditor";
+import { WebcamPreviewWindow } from "./components/webcam-preview/WebcamPreviewWindow";
 import { ShortcutsProvider } from "./contexts/ShortcutsContext";
 import { loadAllCustomFonts } from "./lib/customFonts";
 
@@ -15,7 +16,7 @@ export default function App() {
 		const params = new URLSearchParams(window.location.search);
 		const type = params.get("windowType") || "";
 		setWindowType(type);
-		if (type === "hud-overlay" || type === "source-selector") {
+		if (type === "hud-overlay" || type === "source-selector" || type === "webcam-preview") {
 			document.body.style.background = "transparent";
 			document.documentElement.style.background = "transparent";
 			document.getElementById("root")?.style.setProperty("background", "transparent");
@@ -33,6 +34,8 @@ export default function App() {
 				return <LaunchWindow />;
 			case "source-selector":
 				return <SourceSelector />;
+			case "webcam-preview":
+				return <WebcamPreviewWindow />;
 			case "editor":
 				return (
 					<ShortcutsProvider>
