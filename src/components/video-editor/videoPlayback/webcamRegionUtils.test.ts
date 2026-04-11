@@ -37,46 +37,58 @@ describe("computeWebcamPositionAtTime", () => {
 		expect(result).toEqual(base);
 	});
 
-	it("returns region position well inside a region (far from boundaries)", () => {
+	it("returns region position at exact start boundary", () => {
+		const regions = [makeRegion("r1", 2000, 4000, 0.1, 0.1)];
+		const result = computeWebcamPositionAtTime({ globalPosition: base, regions }, 2000);
+		expect(result).toEqual({ cx: 0.1, cy: 0.1 });
+	});
+
+	it("returns region position at exact end boundary", () => {
+		const regions = [makeRegion("r1", 2000, 4000, 0.1, 0.1)];
+		const result = computeWebcamPositionAtTime({ globalPosition: base, regions }, 4000);
+		expect(result).toEqual({ cx: 0.1, cy: 0.1 });
+	});
+
+	it("returns region position well inside a region", () => {
 		const regions = [makeRegion("r1", 2000, 4000, 0.1, 0.1)];
 		const result = computeWebcamPositionAtTime({ globalPosition: base, regions }, 3000);
 		expect(result).toEqual({ cx: 0.1, cy: 0.1 });
 	});
 
-	it("interpolates into a region at its start boundary", () => {
+	it("returns base 1ms before a region starts", () => {
 		const regions = [makeRegion("r1", 2000, 4000, 0.1, 0.1)];
-		// 150ms into the region — halfway through a 300ms transition
-		const result = computeWebcamPositionAtTime({ globalPosition: base, regions }, 2150);
-		// ease-in-out cubic at t=0.5 is 0.5; halfway between base(0.8,0.8) and region(0.1,0.1)
-		expect(result.cx).toBeCloseTo(0.45, 3);
-		expect(result.cy).toBeCloseTo(0.45, 3);
+		const result = computeWebcamPositionAtTime({ globalPosition: base, regions }, 1999);
+		expect(result).toEqual(base);
 	});
 
-	it("interpolates out of a region at its end boundary", () => {
+	it("returns base 1ms after a region ends", () => {
 		const regions = [makeRegion("r1", 2000, 4000, 0.1, 0.1)];
-		// 150ms before region end — halfway through a 300ms ease-out
-		const result = computeWebcamPositionAtTime({ globalPosition: base, regions }, 3850);
-		expect(result.cx).toBeCloseTo(0.45, 3);
-		expect(result.cy).toBeCloseTo(0.45, 3);
+		const result = computeWebcamPositionAtTime({ globalPosition: base, regions }, 4001);
+		expect(result).toEqual(base);
 	});
 
-	it("interpolates between two back-to-back regions at the shared boundary", () => {
+	it("switches cleanly between back-to-back regions", () => {
 		const regions = [
 			makeRegion("r1", 2000, 4000, 0.1, 0.1),
-			makeRegion("r2", 4000, 6000, 0.9, 0.9),
+			makeRegion("r2", 4001, 6000, 0.9, 0.9),
 		];
-		const at3850 = computeWebcamPositionAtTime({ globalPosition: base, regions }, 3850);
-		const at4150 = computeWebcamPositionAtTime({ globalPosition: base, regions }, 4150);
-		expect(at3850.cx).toBeGreaterThan(0.1);
-		expect(at3850.cx).toBeLessThan(0.9);
-		expect(at4150.cx).toBeGreaterThan(0.1);
-		expect(at4150.cx).toBeLessThan(0.9);
+		expect(computeWebcamPositionAtTime({ globalPosition: base, regions }, 3999)).toEqual({
+			cx: 0.1,
+			cy: 0.1,
+		});
+		expect(computeWebcamPositionAtTime({ globalPosition: base, regions }, 4001)).toEqual({
+			cx: 0.9,
+			cy: 0.9,
+		});
 	});
 
-	it("handles a region whose duration is shorter than twice the transition window", () => {
-		const regions = [makeRegion("r1", 2000, 2200, 0.1, 0.1)];
-		const midRegion = computeWebcamPositionAtTime({ globalPosition: base, regions }, 2100);
-		expect(midRegion.cx).toBeGreaterThan(0.1);
-		expect(midRegion.cx).toBeLessThan(0.8);
+	it("returns the first matching region when regions overlap (implementation detail)", () => {
+		// Note: the app UI prevents overlapping regions, but the function should still be deterministic.
+		const regions = [
+			makeRegion("r1", 2000, 4000, 0.1, 0.1),
+			makeRegion("r2", 3000, 5000, 0.9, 0.9),
+		];
+		const result = computeWebcamPositionAtTime({ globalPosition: base, regions }, 3500);
+		expect(result).toEqual({ cx: 0.1, cy: 0.1 });
 	});
 });
