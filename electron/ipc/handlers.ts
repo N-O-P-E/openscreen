@@ -25,6 +25,7 @@ const PROJECT_FILE_EXTENSION = "openscreen";
 const SHORTCUTS_FILE = path.join(app.getPath("userData"), "shortcuts.json");
 const RECORDING_SESSION_SUFFIX = ".session.json";
 const ALLOWED_IMPORT_VIDEO_EXTENSIONS = new Set([".webm", ".mp4", ".mov", ".avi", ".mkv"]);
+const ALLOWED_IMPORT_AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"]);
 
 /**
  * Paths explicitly approved by the user via file picker dialogs or project loads.
@@ -54,6 +55,28 @@ function isPathAllowed(filePath: string): boolean {
 
 function hasAllowedImportVideoExtension(filePath: string): boolean {
 	return ALLOWED_IMPORT_VIDEO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+function hasAllowedImportAudioExtension(filePath: string): boolean {
+	return ALLOWED_IMPORT_AUDIO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+async function approveReadableAudioPath(filePath?: string | null): Promise<string | null> {
+	if (!filePath) return null;
+	const normalized = path.resolve(filePath);
+	if (!hasAllowedImportAudioExtension(normalized)) {
+		return null;
+	}
+	try {
+		const stats = await fs.stat(normalized);
+		if (!stats.isFile()) {
+			return null;
+		}
+	} catch {
+		return null;
+	}
+	approveFilePath(normalized);
+	return normalized;
 }
 
 async function approveReadableVideoPath(
@@ -717,6 +740,45 @@ export function registerIpcHandlers(
 			return {
 				success: false,
 				message: "Failed to open file picker",
+				error: String(error),
+			};
+		}
+	});
+
+	ipcMain.handle("open-audio-file-picker", async () => {
+		try {
+			const result = await dialog.showOpenDialog({
+				title: "Select an audio file",
+				filters: [
+					{
+						name: "Audio Files",
+						extensions: ["mp3", "wav", "m4a", "aac", "ogg", "flac"],
+					},
+					{ name: "All Files", extensions: ["*"] },
+				],
+				properties: ["openFile"],
+			});
+
+			if (result.canceled || result.filePaths.length === 0) {
+				return { success: false, canceled: true };
+			}
+
+			const approvedPath = await approveReadableAudioPath(result.filePaths[0]);
+			if (!approvedPath) {
+				return {
+					success: false,
+					message: "Selected file is not a supported audio format",
+				};
+			}
+			return {
+				success: true,
+				path: approvedPath,
+			};
+		} catch (error) {
+			console.error("Failed to open audio file picker:", error);
+			return {
+				success: false,
+				message: "Failed to open audio file picker",
 				error: String(error),
 			};
 		}

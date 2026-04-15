@@ -4,11 +4,14 @@ import { normalizeProjectMedia } from "@/lib/recordingSession";
 import { ASPECT_RATIOS, type AspectRatio } from "@/utils/aspectRatioUtils";
 import {
 	type AnnotationRegion,
+	type AudioRegion,
 	type CropRegion,
+	clampAudioVolume,
 	clampPlaybackSpeed,
 	DEFAULT_ANNOTATION_POSITION,
 	DEFAULT_ANNOTATION_SIZE,
 	DEFAULT_ANNOTATION_STYLE,
+	DEFAULT_AUDIO_VOLUME,
 	DEFAULT_BLUR_DATA,
 	DEFAULT_BLUR_FREEHAND_POINTS,
 	DEFAULT_BLUR_INTENSITY,
@@ -56,6 +59,7 @@ export interface ProjectEditorState {
 	trimRegions: TrimRegion[];
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
+	audioRegions: AudioRegion[];
 	webcamKeyframes: WebcamKeyframe[];
 	aspectRatio: AspectRatio;
 	webcamLayoutPreset: WebcamLayoutPreset;
@@ -252,6 +256,46 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				})
 		: [];
 
+	const normalizedAudioRegions: AudioRegion[] = Array.isArray(editor.audioRegions)
+		? editor.audioRegions
+				.filter((region): region is AudioRegion =>
+					Boolean(
+						region &&
+							typeof region.id === "string" &&
+							typeof (region as { sourcePath?: unknown }).sourcePath === "string",
+					),
+				)
+				.map((region) => {
+					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
+					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
+					const endMs = Math.max(startMs + 1, rawEnd);
+					const rawOffset = isFiniteNumber(region.sourceOffsetMs)
+						? Math.round(region.sourceOffsetMs)
+						: 0;
+					const rawSourceDuration = isFiniteNumber(region.sourceDurationMs)
+						? Math.round(region.sourceDurationMs)
+						: Math.max(endMs - startMs, 0);
+					const sourceDurationMs = Math.max(0, rawSourceDuration);
+					const sourceOffsetMs =
+						sourceDurationMs > 0
+							? Math.max(0, Math.min(rawOffset, sourceDurationMs))
+							: Math.max(0, rawOffset);
+					const volume = isFiniteNumber(region.volume)
+						? clampAudioVolume(region.volume)
+						: DEFAULT_AUDIO_VOLUME;
+					return {
+						id: region.id,
+						startMs,
+						endMs,
+						sourcePath: region.sourcePath,
+						sourceOffsetMs,
+						sourceDurationMs,
+						volume,
+					};
+				})
+		: [];
+
 	const normalizedAnnotationRegions: AnnotationRegion[] = Array.isArray(editor.annotationRegions)
 		? editor.annotationRegions
 				.filter((region): region is AnnotationRegion =>
@@ -435,12 +479,14 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		trimRegions: normalizedTrimRegions,
 		speedRegions: normalizedSpeedRegions,
 		annotationRegions: normalizedAnnotationRegions,
+		audioRegions: normalizedAudioRegions,
 		webcamKeyframes: normalizedWebcamKeyframes,
 		aspectRatio:
 			editor.aspectRatio && validAspectRatios.has(editor.aspectRatio) ? editor.aspectRatio : "16:9",
 		webcamLayoutPreset:
 			editor.webcamLayoutPreset === "vertical-stack" ||
-			editor.webcamLayoutPreset === "picture-in-picture"
+			editor.webcamLayoutPreset === "picture-in-picture" ||
+			editor.webcamLayoutPreset === "webcam-only"
 				? editor.webcamLayoutPreset
 				: DEFAULT_WEBCAM_LAYOUT_PRESET,
 		webcamMaskShape:

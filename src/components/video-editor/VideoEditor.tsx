@@ -54,12 +54,15 @@ import { SettingsPanel } from "./SettingsPanel";
 import TimelineEditor from "./timeline/TimelineEditor";
 import {
 	type AnnotationRegion,
+	type AudioRegion,
 	type BlurData,
 	type CursorTelemetryPoint,
+	clampAudioVolume,
 	clampFocusToDepth,
 	DEFAULT_ANNOTATION_POSITION,
 	DEFAULT_ANNOTATION_SIZE,
 	DEFAULT_ANNOTATION_STYLE,
+	DEFAULT_AUDIO_VOLUME,
 	DEFAULT_BLUR_DATA,
 	DEFAULT_FIGURE_DATA,
 	DEFAULT_PLAYBACK_SPEED,
@@ -95,6 +98,7 @@ export default function VideoEditor() {
 		trimRegions,
 		speedRegions,
 		annotationRegions,
+		audioRegions,
 		cropRegion,
 		wallpaper,
 		shadowIntensity,
@@ -131,6 +135,7 @@ export default function VideoEditor() {
 	const [selectedSpeedId, setSelectedSpeedId] = useState<string | null>(null);
 	const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
 	const [selectedBlurId, setSelectedBlurId] = useState<string | null>(null);
+	const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null);
 	const [selectedWebcamKeyframeId, setSelectedWebcamKeyframeId] = useState<string | null>(null);
 	const [isExporting, setIsExporting] = useState(false);
 	const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
@@ -157,6 +162,7 @@ export default function VideoEditor() {
 	const nextZoomIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
+	const nextAudioIdRef = useRef(1);
 	const nextWebcamKeyframeIdRef = useRef<number>(1);
 	const activeWebcamDragKeyframeIdRef = useRef<string | null>(null);
 
@@ -234,6 +240,7 @@ export default function VideoEditor() {
 				trimRegions: normalizedEditor.trimRegions,
 				speedRegions: normalizedEditor.speedRegions,
 				annotationRegions: normalizedEditor.annotationRegions,
+				audioRegions: normalizedEditor.audioRegions,
 				aspectRatio: normalizedEditor.aspectRatio,
 				webcamLayoutPreset: normalizedEditor.webcamLayoutPreset,
 				webcamMaskShape: normalizedEditor.webcamMaskShape,
@@ -252,6 +259,7 @@ export default function VideoEditor() {
 			setSelectedSpeedId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
+			setSelectedAudioId(null);
 			setSelectedWebcamKeyframeId(null);
 
 			nextZoomIdRef.current = deriveNextId(
@@ -269,6 +277,10 @@ export default function VideoEditor() {
 			nextAnnotationIdRef.current = deriveNextId(
 				"annotation",
 				normalizedEditor.annotationRegions.map((region) => region.id),
+			);
+			nextAudioIdRef.current = deriveNextId(
+				"audio",
+				normalizedEditor.audioRegions.map((region) => region.id),
 			);
 			nextWebcamKeyframeIdRef.current = deriveNextId(
 				"webcam-kf",
@@ -309,6 +321,7 @@ export default function VideoEditor() {
 			trimRegions,
 			speedRegions,
 			annotationRegions,
+			audioRegions,
 			aspectRatio,
 			webcamLayoutPreset,
 			webcamMaskShape,
@@ -333,6 +346,7 @@ export default function VideoEditor() {
 		trimRegions,
 		speedRegions,
 		annotationRegions,
+		audioRegions,
 		aspectRatio,
 		webcamLayoutPreset,
 		webcamMaskShape,
@@ -472,6 +486,7 @@ export default function VideoEditor() {
 				trimRegions,
 				speedRegions,
 				annotationRegions,
+				audioRegions,
 				aspectRatio,
 				webcamLayoutPreset,
 				webcamMaskShape,
@@ -529,6 +544,7 @@ export default function VideoEditor() {
 			trimRegions,
 			speedRegions,
 			annotationRegions,
+			audioRegions,
 			aspectRatio,
 			webcamLayoutPreset,
 			webcamMaskShape,
@@ -680,6 +696,7 @@ export default function VideoEditor() {
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
 			setSelectedWebcamKeyframeId(null);
+			setSelectedAudioId(null);
 		}
 	}, []);
 
@@ -690,6 +707,7 @@ export default function VideoEditor() {
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
 			setSelectedWebcamKeyframeId(null);
+			setSelectedAudioId(null);
 		}
 	}, []);
 
@@ -700,6 +718,7 @@ export default function VideoEditor() {
 			setSelectedTrimId(null);
 			setSelectedBlurId(null);
 			setSelectedWebcamKeyframeId(null);
+			setSelectedAudioId(null);
 		}
 	}, []);
 
@@ -711,6 +730,7 @@ export default function VideoEditor() {
 			setSelectedAnnotationId(null);
 			setSelectedSpeedId(null);
 			setSelectedWebcamKeyframeId(null);
+			setSelectedAudioId(null);
 		}
 	}, []);
 
@@ -877,6 +897,7 @@ export default function VideoEditor() {
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
 			setSelectedWebcamKeyframeId(null);
+			setSelectedAudioId(null);
 		}
 	}, []);
 
@@ -888,6 +909,7 @@ export default function VideoEditor() {
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
 			setSelectedSpeedId(null);
+			setSelectedAudioId(null);
 		}
 	}, []);
 
@@ -1167,6 +1189,171 @@ export default function VideoEditor() {
 			}));
 		},
 		[selectedSpeedId, pushState],
+	);
+
+	// ── Audio track handlers ─────────────────────────────────────────────
+
+	const handleAudioImport = useCallback(async () => {
+		const durationMs = Math.round(durationRef.current * 1000);
+		const pick = await window.electronAPI.openAudioFilePicker?.();
+		if (!pick || pick.canceled || !pick.success || !pick.path) {
+			if (pick && !pick.canceled && pick.message) {
+				toast.error(pick.message);
+			}
+			return;
+		}
+		// Probe the audio file's duration via a transient HTMLAudioElement.
+		const url = toFileUrl(pick.path);
+		const probe = document.createElement("audio");
+		probe.preload = "metadata";
+		probe.src = url;
+		const sourceDurationMs = await new Promise<number>((resolve) => {
+			const onLoaded = () => {
+				const ms = Number.isFinite(probe.duration) ? Math.round(probe.duration * 1000) : 0;
+				cleanup();
+				resolve(Math.max(0, ms));
+			};
+			const onError = () => {
+				cleanup();
+				resolve(0);
+			};
+			const cleanup = () => {
+				probe.removeEventListener("loadedmetadata", onLoaded);
+				probe.removeEventListener("error", onError);
+				probe.src = "";
+			};
+			probe.addEventListener("loadedmetadata", onLoaded);
+			probe.addEventListener("error", onError);
+		});
+		if (sourceDurationMs <= 0) {
+			toast.error(t("errors.audioLoadFailed") || "Could not read audio file duration");
+			return;
+		}
+		const startMs = Math.max(0, Math.min(Math.round(currentTimeRef.current * 1000), durationMs));
+		const availableMs = Math.max(0, durationMs - startMs);
+		const regionDurationMs = Math.min(
+			sourceDurationMs,
+			availableMs > 0 ? availableMs : sourceDurationMs,
+		);
+		if (regionDurationMs <= 0) {
+			toast.error(t("errors.audioNoSpace") || "No room on the timeline for this audio clip");
+			return;
+		}
+		const id = `audio-${nextAudioIdRef.current++}`;
+		const newRegion: AudioRegion = {
+			id,
+			startMs,
+			endMs: startMs + regionDurationMs,
+			sourcePath: url,
+			sourceOffsetMs: 0,
+			sourceDurationMs,
+			volume: DEFAULT_AUDIO_VOLUME,
+		};
+		pushState((prev) => ({ audioRegions: [...prev.audioRegions, newRegion] }));
+		setSelectedAudioId(id);
+		setSelectedZoomId(null);
+		setSelectedTrimId(null);
+		setSelectedSpeedId(null);
+		setSelectedAnnotationId(null);
+		setSelectedBlurId(null);
+	}, [pushState, t]);
+
+	const handleAudioSpanChange = useCallback(
+		(id: string, span: Span) => {
+			pushState((prev) => ({
+				audioRegions: prev.audioRegions.map((region) => {
+					if (region.id !== id) return region;
+					const newStart = Math.round(span.start);
+					const newEnd = Math.round(span.end);
+					// When trimming the left edge, shift the source offset so the
+					// same audio sample plays at the new timeline position.
+					const leftDelta = newStart - region.startMs;
+					const maxOffset =
+						region.sourceDurationMs > 0
+							? Math.max(0, region.sourceDurationMs - (newEnd - newStart))
+							: region.sourceOffsetMs + leftDelta;
+					const nextOffset = Math.max(0, Math.min(region.sourceOffsetMs + leftDelta, maxOffset));
+					return {
+						...region,
+						startMs: newStart,
+						endMs: newEnd,
+						sourceOffsetMs: nextOffset,
+					};
+				}),
+			}));
+		},
+		[pushState],
+	);
+
+	const handleAudioDelete = useCallback(
+		(id: string) => {
+			pushState((prev) => ({
+				audioRegions: prev.audioRegions.filter((region) => region.id !== id),
+			}));
+			if (selectedAudioId === id) {
+				setSelectedAudioId(null);
+			}
+		},
+		[selectedAudioId, pushState],
+	);
+
+	const handleAudioVolumeChange = useCallback(
+		(volume: number) => {
+			if (!selectedAudioId) return;
+			pushState((prev) => ({
+				audioRegions: prev.audioRegions.map((region) =>
+					region.id === selectedAudioId ? { ...region, volume: clampAudioVolume(volume) } : region,
+				),
+			}));
+		},
+		[selectedAudioId, pushState],
+	);
+
+	const handleAudioSplit = useCallback(() => {
+		if (!selectedAudioId) return;
+		const splitMs = Math.round(currentTimeRef.current * 1000);
+		pushState((prev) => {
+			const region = prev.audioRegions.find((r) => r.id === selectedAudioId);
+			if (!region) return {};
+			// Split point must fall strictly inside the region.
+			if (splitMs <= region.startMs + 1 || splitMs >= region.endMs - 1) {
+				return {};
+			}
+			const leftEndMs = splitMs;
+			const rightStartMs = splitMs;
+			const leftRegion: AudioRegion = {
+				...region,
+				endMs: leftEndMs,
+			};
+			const rightRegion: AudioRegion = {
+				...region,
+				id: `audio-${nextAudioIdRef.current++}`,
+				startMs: rightStartMs,
+				sourceOffsetMs: region.sourceOffsetMs + (rightStartMs - region.startMs),
+			};
+			return {
+				audioRegions: prev.audioRegions.flatMap((r) =>
+					r.id === region.id ? [leftRegion, rightRegion] : [r],
+				),
+			};
+		});
+	}, [selectedAudioId, pushState]);
+
+	const handleSelectAudio = useCallback((id: string | null) => {
+		setSelectedAudioId(id);
+		if (id !== null) {
+			setSelectedZoomId(null);
+			setSelectedTrimId(null);
+			setSelectedSpeedId(null);
+			setSelectedAnnotationId(null);
+			setSelectedBlurId(null);
+			setSelectedWebcamKeyframeId(null);
+		}
+	}, []);
+
+	const selectedAudioRegion = useMemo(
+		() => audioRegions.find((region) => region.id === selectedAudioId) ?? null,
+		[audioRegions, selectedAudioId],
 	);
 
 	const handleAnnotationAdded = useCallback(
@@ -1846,6 +2033,12 @@ export default function VideoEditor() {
 			return;
 		}
 
+		if (audioRegions.length > 0) {
+			toast.warning("Imported audio tracks won't be included in this export yet", {
+				description: "Audio preview works, but mixing into the output video is coming soon.",
+			});
+		}
+
 		// Build export settings from current state
 		const sourceWidth = video.videoWidth || 1920;
 		const sourceHeight = video.videoHeight || 1080;
@@ -1891,6 +2084,7 @@ export default function VideoEditor() {
 		gifSizePreset,
 		aspectRatio,
 		cropRegion,
+		audioRegions,
 		handleExport,
 	]);
 
@@ -2075,6 +2269,7 @@ export default function VideoEditor() {
 											cropRegion={cropRegion}
 											trimRegions={trimRegions}
 											speedRegions={speedRegions}
+											audioRegions={audioRegions}
 											annotationRegions={annotationOnlyRegions}
 											selectedAnnotationId={selectedAnnotationId}
 											onSelectAnnotation={handleSelectAnnotation}
@@ -2157,6 +2352,13 @@ export default function VideoEditor() {
 									onWebcamKeyframeDelete={handleWebcamKeyframeDelete}
 									selectedWebcamKeyframeId={selectedWebcamKeyframeId}
 									onSelectWebcamKeyframe={handleSelectWebcamKeyframe}
+									audioRegions={audioRegions}
+									onAudioImport={handleAudioImport}
+									onAudioSpanChange={handleAudioSpanChange}
+									onAudioDelete={handleAudioDelete}
+									onAudioSplit={handleAudioSplit}
+									selectedAudioId={selectedAudioId}
+									onSelectAudio={handleSelectAudio}
 									aspectRatio={aspectRatio}
 									onAspectRatioChange={(ar) =>
 										pushState({
@@ -2268,6 +2470,11 @@ export default function VideoEditor() {
 						}
 						onSpeedChange={handleSpeedChange}
 						onSpeedDelete={handleSpeedDelete}
+						selectedAudioRegion={selectedAudioRegion}
+						onAudioVolumeChange={handleAudioVolumeChange}
+						onAudioVolumeCommit={commitState}
+						onAudioDelete={handleAudioDelete}
+						onAudioSplit={handleAudioSplit}
 						unsavedExport={unsavedExport}
 						onSaveUnsavedExport={handleSaveUnsavedExport}
 					/>

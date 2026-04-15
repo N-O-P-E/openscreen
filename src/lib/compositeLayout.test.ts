@@ -191,6 +191,38 @@ describe("computeCompositeLayout", () => {
 		expect(squareLayout?.webcamRect?.maskShape).toBe("square");
 	});
 
+	it("fills the entire canvas with the webcam and hides the screen in webcam-only mode", () => {
+		const layout = computeCompositeLayout({
+			canvasSize: { width: 1920, height: 1080 },
+			screenSize: { width: 1920, height: 1080 },
+			webcamSize: { width: 1280, height: 720 },
+			layoutPreset: "webcam-only",
+		});
+
+		expect(layout).not.toBeNull();
+		expect(layout!.hideScreen).toBe(true);
+		expect(layout!.webcamRect).toEqual({
+			x: 0,
+			y: 0,
+			width: 1920,
+			height: 1080,
+			borderRadius: 0,
+			maskShape: "rectangle",
+		});
+	});
+
+	it("fills the canvas in webcam-only mode regardless of webcam aspect ratio", () => {
+		const portraitOutput = computeCompositeLayout({
+			canvasSize: { width: 1080, height: 1920 },
+			screenSize: { width: 1920, height: 1080 },
+			webcamSize: { width: 1280, height: 720 },
+			layoutPreset: "webcam-only",
+		});
+
+		expect(portraitOutput!.webcamRect!.width).toBe(1080);
+		expect(portraitOutput!.webcamRect!.height).toBe(1920);
+	});
+
 	it("applies larger rounding for the rounded webcam mask", () => {
 		const roundedLayout = computeCompositeLayout({
 			canvasSize: { width: 1920, height: 1080 },

@@ -87,7 +87,8 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
 	// Calculate scale to fit the cropped area in the viewport
 	// Padding is a percentage (0-100), where 50 matches the original VIEWPORT_SCALE of 0.8
 	// Vertical stack ignores padding — it's full-bleed
-	const effectivePadding = webcamLayoutPreset === "vertical-stack" ? 0 : padding;
+	const effectivePadding =
+		webcamLayoutPreset === "vertical-stack" || webcamLayoutPreset === "webcam-only" ? 0 : padding;
 	const paddingScale = 1.0 - (effectivePadding / 100) * 0.4;
 	const maxDisplayWidth = width * paddingScale;
 	const maxDisplayHeight = height * paddingScale;
@@ -109,9 +110,14 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
 
 	const screenRect = compositeLayout.screenRect;
 
+	// Fullscreen-webcam mode: the screen recording is not displayed at all.
+	videoSprite.visible = !compositeLayout.hideScreen;
+
 	// Cover mode: scale to fill the rect (may crop), otherwise fit-to-width
 	let scale: number;
-	if (compositeLayout.screenCover) {
+	if (compositeLayout.hideScreen) {
+		scale = 0;
+	} else if (compositeLayout.screenCover) {
 		scale = Math.max(screenRect.width / croppedVideoWidth, screenRect.height / croppedVideoHeight);
 	} else {
 		scale = screenRect.width / croppedVideoWidth;

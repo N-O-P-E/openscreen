@@ -7,6 +7,7 @@ import {
 	Image,
 	Lock,
 	Palette,
+	Scissors,
 	Sparkles,
 	Star,
 	Trash2,
@@ -48,6 +49,7 @@ import { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelp";
 import type {
 	AnnotationRegion,
 	AnnotationType,
+	AudioRegion,
 	BlurData,
 	CropRegion,
 	FigureData,
@@ -58,7 +60,12 @@ import type {
 	ZoomDepth,
 	ZoomFocusMode,
 } from "./types";
-import { DEFAULT_WEBCAM_SIZE_PRESET, MAX_PLAYBACK_SPEED, SPEED_OPTIONS } from "./types";
+import {
+	DEFAULT_WEBCAM_SIZE_PRESET,
+	MAX_AUDIO_VOLUME,
+	MAX_PLAYBACK_SPEED,
+	SPEED_OPTIONS,
+} from "./types";
 
 function CustomSpeedInput({
 	value,
@@ -228,6 +235,11 @@ interface SettingsPanelProps {
 	webcamSizePreset?: WebcamSizePreset;
 	onWebcamSizePresetChange?: (size: WebcamSizePreset) => void;
 	onWebcamSizePresetCommit?: () => void;
+	selectedAudioRegion?: AudioRegion | null;
+	onAudioVolumeChange?: (volume: number) => void;
+	onAudioVolumeCommit?: () => void;
+	onAudioDelete?: (id: string) => void;
+	onAudioSplit?: () => void;
 }
 
 export default SettingsPanel;
@@ -309,6 +321,11 @@ export function SettingsPanel({
 	webcamSizePreset = DEFAULT_WEBCAM_SIZE_PRESET,
 	onWebcamSizePresetChange,
 	onWebcamSizePresetCommit,
+	selectedAudioRegion = null,
+	onAudioVolumeChange,
+	onAudioVolumeCommit,
+	onAudioDelete,
+	onAudioSplit,
 }: SettingsPanelProps) {
 	const t = useScopedT("settings");
 	const [wallpaperPaths, setWallpaperPaths] = useState<string[]>([]);
@@ -674,6 +691,56 @@ export function SettingsPanel({
 					</div>
 				)}
 
+				{selectedAudioRegion && (
+					<div className="mb-4 p-3 rounded-xl bg-purple-500/5 border border-purple-500/20 space-y-3">
+						<div className="flex items-center justify-between">
+							<span className="text-xs font-semibold text-purple-200">Audio clip</span>
+							<span className="text-[10px] text-slate-500 font-mono truncate max-w-[150px]">
+								{selectedAudioRegion.sourcePath.split(/[\\/]/).pop()}
+							</span>
+						</div>
+						<div>
+							<div className="flex items-center justify-between mb-1.5">
+								<span className="text-[11px] font-medium text-slate-300">Volume</span>
+								<span className="text-[10px] text-slate-400 font-mono">
+									{Math.round(selectedAudioRegion.volume * 100)}%
+								</span>
+							</div>
+							<Slider
+								value={[selectedAudioRegion.volume]}
+								onValueChange={(values) => onAudioVolumeChange?.(values[0])}
+								onValueCommit={() => onAudioVolumeCommit?.()}
+								min={0}
+								max={MAX_AUDIO_VOLUME}
+								step={0.01}
+								className="w-full [&_[role=slider]]:bg-purple-500 [&_[role=slider]]:border-purple-500 [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+							/>
+						</div>
+						<div className="flex gap-2">
+							{onAudioSplit && (
+								<Button
+									onClick={() => onAudioSplit?.()}
+									variant="outline"
+									size="sm"
+									className="flex-1 gap-1.5 bg-white/5 text-slate-200 border-white/10 hover:bg-white/10 text-[10px] h-8"
+								>
+									<Scissors className="w-3 h-3" />
+									Split at playhead
+								</Button>
+							)}
+							<Button
+								onClick={() => onAudioDelete?.(selectedAudioRegion.id)}
+								variant="destructive"
+								size="sm"
+								className="flex-1 gap-1.5 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 text-[10px] h-8"
+							>
+								<Trash2 className="w-3 h-3" />
+								Delete
+							</Button>
+						</div>
+					</div>
+				)}
+
 				<div className="mb-4">
 					<div className="flex items-center justify-between mb-3">
 						<span className="text-sm font-medium text-slate-200">{t("speed.playbackSpeed")}</span>
@@ -782,12 +849,15 @@ export function SettingsPanel({
 											{WEBCAM_LAYOUT_PRESETS.filter(
 												(preset) =>
 													preset.value === "picture-in-picture" ||
+													preset.value === "webcam-only" ||
 													isPortraitAspectRatio(aspectRatio),
 											).map((preset) => (
 												<SelectItem key={preset.value} value={preset.value} className="text-xs">
 													{preset.value === "picture-in-picture"
 														? t("layout.pictureInPicture")
-														: t("layout.verticalStack")}
+														: preset.value === "webcam-only"
+															? t("layout.fullscreenWebcam")
+															: t("layout.verticalStack")}
 												</SelectItem>
 											))}
 										</SelectContent>
@@ -976,28 +1046,34 @@ export function SettingsPanel({
 										className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
 									/>
 								</div>
-								<div
-									className={`p-2 rounded-lg bg-white/5 border border-white/5 ${webcamLayoutPreset === "vertical-stack" ? "opacity-40 pointer-events-none" : ""}`}
-								>
-									<div className="flex items-center justify-between mb-1">
-										<div className="text-[10px] font-medium text-slate-300">
-											{t("effects.padding")}
+								{(() => {
+									const paddingDisabled =
+										webcamLayoutPreset === "vertical-stack" || webcamLayoutPreset === "webcam-only";
+									return (
+										<div
+											className={`p-2 rounded-lg bg-white/5 border border-white/5 ${paddingDisabled ? "opacity-40 pointer-events-none" : ""}`}
+										>
+											<div className="flex items-center justify-between mb-1">
+												<div className="text-[10px] font-medium text-slate-300">
+													{t("effects.padding")}
+												</div>
+												<span className="text-[10px] text-slate-500 font-mono">
+													{paddingDisabled ? "—" : `${padding}%`}
+												</span>
+											</div>
+											<Slider
+												value={[paddingDisabled ? 0 : padding]}
+												onValueChange={(values) => onPaddingChange?.(values[0])}
+												onValueCommit={() => onPaddingCommit?.()}
+												min={0}
+												max={100}
+												step={1}
+												disabled={paddingDisabled}
+												className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+											/>
 										</div>
-										<span className="text-[10px] text-slate-500 font-mono">
-											{webcamLayoutPreset === "vertical-stack" ? "—" : `${padding}%`}
-										</span>
-									</div>
-									<Slider
-										value={[webcamLayoutPreset === "vertical-stack" ? 0 : padding]}
-										onValueChange={(values) => onPaddingChange?.(values[0])}
-										onValueCommit={() => onPaddingCommit?.()}
-										min={0}
-										max={100}
-										step={1}
-										disabled={webcamLayoutPreset === "vertical-stack"}
-										className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
-									/>
-								</div>
+									);
+								})()}
 							</div>
 
 							<Button

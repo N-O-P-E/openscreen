@@ -200,6 +200,32 @@ export interface SpeedRegion {
 	speed: PlaybackSpeed;
 }
 
+/** Volume: 0 = muted, 1 = original level, up to 2 = boosted. */
+export const MIN_AUDIO_VOLUME = 0;
+export const MAX_AUDIO_VOLUME = 2;
+export const DEFAULT_AUDIO_VOLUME = 1;
+
+export interface AudioRegion {
+	id: string;
+	/** Timeline start, in milliseconds. */
+	startMs: number;
+	/** Timeline end, in milliseconds. */
+	endMs: number;
+	/** file:// URL of the source audio file. */
+	sourcePath: string;
+	/** Offset into the source file where this region begins playing, in milliseconds. */
+	sourceOffsetMs: number;
+	/** Full duration of the source file, in milliseconds. Used for clamping trim operations. */
+	sourceDurationMs: number;
+	/** Gain, 0 = muted, 1 = original, up to MAX_AUDIO_VOLUME. */
+	volume: number;
+}
+
+export function clampAudioVolume(volume: number): number {
+	if (!Number.isFinite(volume)) return DEFAULT_AUDIO_VOLUME;
+	return Math.min(MAX_AUDIO_VOLUME, Math.max(MIN_AUDIO_VOLUME, volume));
+}
+
 export const SPEED_OPTIONS: Array<{ speed: PlaybackSpeed; label: string }> = [
 	{ speed: 0.25, label: "0.25×" },
 	{ speed: 0.5, label: "0.5×" },

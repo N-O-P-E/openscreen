@@ -30,6 +30,7 @@ import { formatShortcut } from "@/utils/platformUtils";
 import { TutorialHelp } from "../TutorialHelp";
 import type {
 	AnnotationRegion,
+	AudioRegion,
 	CursorTelemetryPoint,
 	SpeedRegion,
 	TrimRegion,
@@ -49,6 +50,7 @@ const ANNOTATION_ROW_ID = "row-annotation";
 const BLUR_ROW_ID = "row-blur";
 const SPEED_ROW_ID = "row-speed";
 const WEBCAM_ROW_ID = "row-webcam";
+const AUDIO_ROW_ID = "row-audio";
 const WEBCAM_KEYFRAME_DISPLAY_SPAN_MS = 150;
 const FALLBACK_RANGE_MS = 1000;
 const TARGET_MARKER_COUNT = 12;
@@ -96,6 +98,13 @@ interface TimelineEditorProps {
 	onWebcamKeyframeDelete?: (id: string) => void;
 	selectedWebcamKeyframeId?: string | null;
 	onSelectWebcamKeyframe?: (id: string | null) => void;
+	audioRegions?: AudioRegion[];
+	onAudioImport?: () => void;
+	onAudioSpanChange?: (id: string, span: Span) => void;
+	onAudioDelete?: (id: string) => void;
+	onAudioSplit?: () => void;
+	selectedAudioId?: string | null;
+	onSelectAudio?: (id: string | null) => void;
 	aspectRatio: AspectRatio;
 	onAspectRatioChange: (aspectRatio: AspectRatio) => void;
 }
@@ -113,7 +122,7 @@ interface TimelineRenderItem {
 	label: string;
 	zoomDepth?: number;
 	speedValue?: number;
-	variant: "zoom" | "trim" | "annotation" | "speed" | "blur" | "webcam";
+	variant: "zoom" | "trim" | "annotation" | "speed" | "blur" | "webcam" | "audio";
 }
 
 const SCALE_CANDIDATES = [
@@ -545,12 +554,15 @@ function Timeline({
 	onSelectBlur,
 	onSelectSpeed,
 	onSelectWebcamKeyframe,
+	onSelectAudio,
+	onAudioImport,
 	selectedZoomId,
 	selectedTrimId,
 	selectedAnnotationId,
 	selectedBlurId,
 	selectedSpeedId,
 	selectedWebcamKeyframeId,
+	selectedAudioId,
 	keyframes = [],
 }: {
 	items: TimelineRenderItem[];
@@ -564,12 +576,15 @@ function Timeline({
 	onSelectBlur?: (id: string | null) => void;
 	onSelectSpeed?: (id: string | null) => void;
 	onSelectWebcamKeyframe?: (id: string | null) => void;
+	onSelectAudio?: (id: string | null) => void;
+	onAudioImport?: () => void;
 	selectedZoomId: string | null;
 	selectedTrimId?: string | null;
 	selectedAnnotationId?: string | null;
 	selectedBlurId?: string | null;
 	selectedSpeedId?: string | null;
 	selectedWebcamKeyframeId?: string | null;
+	selectedAudioId?: string | null;
 	keyframes?: { id: string; time: number }[];
 }) {
 	const t = useScopedT("timeline");
@@ -596,6 +611,7 @@ function Timeline({
 			onSelectBlur?.(null);
 			onSelectSpeed?.(null);
 			onSelectWebcamKeyframe?.(null);
+			onSelectAudio?.(null);
 
 			const rect = e.currentTarget.getBoundingClientRect();
 			const clickX = e.clientX - rect.left - sidebarWidth;
@@ -669,6 +685,7 @@ function Timeline({
 	const blurItems = items.filter((item) => item.rowId === BLUR_ROW_ID);
 	const speedItems = items.filter((item) => item.rowId === SPEED_ROW_ID);
 	const webcamItems = items.filter((item) => item.rowId === WEBCAM_ROW_ID);
+	const audioItems = items.filter((item) => item.rowId === AUDIO_ROW_ID);
 
 	return (
 		<div
@@ -790,6 +807,36 @@ function Timeline({
 					</Item>
 				))}
 			</Row>
+
+			<Row id={AUDIO_ROW_ID} isEmpty={audioItems.length === 0}>
+				{audioItems.map((item) => (
+					<Item
+						id={item.id}
+						key={item.id}
+						rowId={item.rowId}
+						span={item.span}
+						isSelected={item.id === selectedAudioId}
+						onSelect={() => onSelectAudio?.(item.id)}
+						variant="audio"
+					>
+						{item.label}
+					</Item>
+				))}
+				{audioItems.length === 0 && onAudioImport && (
+					<div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+						<button
+							type="button"
+							onClick={(e) => {
+								e.stopPropagation();
+								onAudioImport();
+							}}
+							className="pointer-events-auto text-[11px] font-medium text-purple-200/80 hover:text-white bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 hover:border-purple-500/60 rounded-md px-3 py-1 transition-all"
+						>
+							{t("hints.importAudio") || "+ Import audio"}
+						</button>
+					</div>
+				)}
+			</Row>
 		</div>
 	);
 }
@@ -836,6 +883,13 @@ export default function TimelineEditor({
 	onWebcamKeyframeDelete,
 	selectedWebcamKeyframeId,
 	onSelectWebcamKeyframe,
+	audioRegions = [],
+	onAudioImport,
+	onAudioSpanChange,
+	onAudioDelete,
+	onAudioSplit,
+	selectedAudioId,
+	onSelectAudio,
 	aspectRatio,
 	onAspectRatioChange,
 }: TimelineEditorProps) {
@@ -931,6 +985,12 @@ export default function TimelineEditor({
 		onWebcamKeyframeDelete(selectedWebcamKeyframeId);
 		onSelectWebcamKeyframe(null);
 	}, [selectedWebcamKeyframeId, onWebcamKeyframeDelete, onSelectWebcamKeyframe]);
+
+	const deleteSelectedAudio = useCallback(() => {
+		if (!selectedAudioId || !onAudioDelete || !onSelectAudio) return;
+		onAudioDelete(selectedAudioId);
+		onSelectAudio(null);
+	}, [selectedAudioId, onAudioDelete, onSelectAudio]);
 
 	useEffect(() => {
 		setRange(createInitialRange(totalMs));
@@ -1314,6 +1374,31 @@ export default function TimelineEditor({
 			if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "w") {
 				handleAddWebcamKeyframe();
 			}
+			// Audio import shortcut (I)
+			if (
+				!e.ctrlKey &&
+				!e.metaKey &&
+				!e.shiftKey &&
+				!e.altKey &&
+				e.key.toLowerCase() === "i" &&
+				onAudioImport
+			) {
+				e.preventDefault();
+				onAudioImport();
+			}
+			// Audio split shortcut (K) when an audio region is selected
+			if (
+				!e.ctrlKey &&
+				!e.metaKey &&
+				!e.shiftKey &&
+				!e.altKey &&
+				e.key.toLowerCase() === "k" &&
+				selectedAudioId &&
+				onAudioSplit
+			) {
+				e.preventDefault();
+				onAudioSplit();
+			}
 
 			// Tab: Cycle through overlapping annotations at current time
 			if (e.key === "Tab" && annotationRegions.length > 0) {
@@ -1357,6 +1442,8 @@ export default function TimelineEditor({
 					deleteSelectedSpeed();
 				} else if (selectedWebcamKeyframeId) {
 					deleteSelectedWebcamKeyframe();
+				} else if (selectedAudioId) {
+					deleteSelectedAudio();
 				}
 			}
 		};
@@ -1377,6 +1464,9 @@ export default function TimelineEditor({
 		deleteSelectedBlur,
 		deleteSelectedSpeed,
 		deleteSelectedWebcamKeyframe,
+		deleteSelectedAudio,
+		onAudioImport,
+		onAudioSplit,
 		selectedKeyframeId,
 		selectedZoomId,
 		selectedTrimId,
@@ -1384,6 +1474,7 @@ export default function TimelineEditor({
 		selectedBlurId,
 		selectedSpeedId,
 		selectedWebcamKeyframeId,
+		selectedAudioId,
 		annotationRegions,
 		blurRegions,
 		currentTime,
@@ -1472,8 +1563,32 @@ export default function TimelineEditor({
 			};
 		});
 
-		return [...zooms, ...trims, ...annotations, ...blurs, ...speeds, ...webcams];
-	}, [zoomRegions, trimRegions, annotationRegions, blurRegions, speedRegions, webcamKeyframes, t]);
+		const audios: TimelineRenderItem[] = audioRegions.map((region, index) => {
+			const nameFromPath = region.sourcePath
+				.split(/[\\/]/)
+				.pop()
+				?.replace(/\.[^.]+$/, "");
+			const fallback = t("labels.audioItem", { index: String(index + 1) }) || `Audio ${index + 1}`;
+			return {
+				id: region.id,
+				rowId: AUDIO_ROW_ID,
+				span: { start: region.startMs, end: region.endMs },
+				label: nameFromPath || fallback,
+				variant: "audio",
+			};
+		});
+
+		return [...zooms, ...trims, ...annotations, ...blurs, ...speeds, ...webcams, ...audios];
+	}, [
+		zoomRegions,
+		trimRegions,
+		annotationRegions,
+		blurRegions,
+		speedRegions,
+		webcamKeyframes,
+		audioRegions,
+		t,
+	]);
 
 	// Flat list of all non-annotation region spans for neighbour-clamping during drag/resize
 	const allRegionSpans = useMemo(() => {
@@ -1505,6 +1620,8 @@ export default function TimelineEditor({
 				// Convert the dnd-timeline span back to a single timeMs (midpoint)
 				const midMs = Math.round((span.start + span.end) / 2);
 				onWebcamKeyframeTimeChange?.(id, midMs);
+			} else if (audioRegions.some((r) => r.id === id)) {
+				onAudioSpanChange?.(id, span);
 			}
 		},
 		[
@@ -1514,12 +1631,14 @@ export default function TimelineEditor({
 			annotationRegions,
 			blurRegions,
 			webcamKeyframes,
+			audioRegions,
 			onZoomSpanChange,
 			onTrimSpanChange,
 			onSpeedSpanChange,
 			onAnnotationSpanChange,
 			onBlurSpanChange,
 			onWebcamKeyframeTimeChange,
+			onAudioSpanChange,
 		],
 	);
 
@@ -1661,7 +1780,7 @@ export default function TimelineEditor({
 			</div>
 			<div
 				ref={timelineContainerRef}
-				className="flex-1 overflow-hidden bg-[#09090b] relative"
+				className="flex-1 overflow-x-hidden overflow-y-auto bg-[#09090b] relative"
 				onClick={() => setSelectedKeyframeId(null)}
 			>
 				<TimelineWrapper
@@ -1694,12 +1813,15 @@ export default function TimelineEditor({
 						onSelectBlur={onSelectBlur}
 						onSelectSpeed={onSelectSpeed}
 						onSelectWebcamKeyframe={onSelectWebcamKeyframe}
+						onSelectAudio={onSelectAudio}
+						onAudioImport={onAudioImport}
 						selectedZoomId={selectedZoomId}
 						selectedTrimId={selectedTrimId}
 						selectedAnnotationId={selectedAnnotationId}
 						selectedBlurId={selectedBlurId}
 						selectedSpeedId={selectedSpeedId}
 						selectedWebcamKeyframeId={selectedWebcamKeyframeId}
+						selectedAudioId={selectedAudioId}
 						keyframes={keyframes}
 					/>
 				</TimelineWrapper>

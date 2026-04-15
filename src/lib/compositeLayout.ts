@@ -15,7 +15,7 @@ export interface Size {
 	height: number;
 }
 
-export type WebcamLayoutPreset = "picture-in-picture" | "vertical-stack";
+export type WebcamLayoutPreset = "picture-in-picture" | "vertical-stack" | "webcam-only";
 /** Webcam size as a percentage of the canvas reference dimension (10–50). */
 export type WebcamSizePreset = number;
 
@@ -44,9 +44,13 @@ interface StackTransform {
 	gap: number;
 }
 
+interface FullscreenTransform {
+	type: "fullscreen";
+}
+
 export interface WebcamLayoutPresetDefinition {
 	label: string;
-	transform: OverlayTransform | StackTransform;
+	transform: OverlayTransform | StackTransform | FullscreenTransform;
 	borderRadius: BorderRadiusRule;
 	shadow: WebcamLayoutShadow | null;
 }
@@ -56,6 +60,8 @@ export interface WebcamCompositeLayout {
 	webcamRect: StyledRenderRect | null;
 	/** When true, the video should be scaled to cover screenRect (cropping overflow). */
 	screenCover?: boolean;
+	/** When true, the screen recording should not be rendered (webcam fills the canvas). */
+	hideScreen?: boolean;
 }
 
 /** Convert a webcam size percentage (10–50) to a fraction of the reference dimension. */
@@ -93,6 +99,18 @@ const WEBCAM_LAYOUT_PRESET_MAP: Record<WebcamLayoutPreset, WebcamLayoutPresetDef
 		transform: {
 			type: "stack",
 			gap: 0,
+		},
+		borderRadius: {
+			max: 0,
+			min: 0,
+			fraction: 0,
+		},
+		shadow: null,
+	},
+	"webcam-only": {
+		label: "Fullscreen Webcam",
+		transform: {
+			type: "fullscreen",
 		},
 		borderRadius: {
 			max: 0,
@@ -155,6 +173,23 @@ export function computeCompositeLayout(params: {
 
 	if (canvasWidth <= 0 || canvasHeight <= 0 || screenWidth <= 0 || screenHeight <= 0) {
 		return null;
+	}
+
+	if (preset.transform.type === "fullscreen") {
+		// Webcam fills the entire canvas (cover mode — crops overflow if aspect ratios differ).
+		// Screen recording is not rendered. Border radius / shadow / mask shape don't apply.
+		return {
+			screenRect: { x: 0, y: 0, width: 0, height: 0 },
+			webcamRect: {
+				x: 0,
+				y: 0,
+				width: canvasWidth,
+				height: canvasHeight,
+				borderRadius: 0,
+				maskShape: "rectangle",
+			},
+			hideScreen: true,
+		};
 	}
 
 	if (preset.transform.type === "stack") {

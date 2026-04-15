@@ -35,6 +35,7 @@ import {
 import { AnnotationOverlay } from "./AnnotationOverlay";
 import {
 	type AnnotationRegion,
+	type AudioRegion,
 	type BlurData,
 	DEFAULT_WEBCAM_MASK_SHAPE,
 	DEFAULT_WEBCAM_SIZE_PRESET,
@@ -102,6 +103,7 @@ interface VideoPlaybackProps {
 	cropRegion?: import("./types").CropRegion;
 	trimRegions?: TrimRegion[];
 	speedRegions?: SpeedRegion[];
+	audioRegions?: AudioRegion[];
 	aspectRatio: AspectRatio;
 	annotationRegions?: AnnotationRegion[];
 	selectedAnnotationId?: string | null;
@@ -161,6 +163,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			cropRegion,
 			trimRegions = [],
 			speedRegions = [],
+			audioRegions = [],
 			aspectRatio,
 			annotationRegions = [],
 			selectedAnnotationId,
@@ -1211,6 +1214,83 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			webcamVideo.pause();
 			webcamVideo.currentTime = 0;
 		}, [webcamVideoPath]);
+
+		// ── Audio regions playback ───────────────────────────────────────
+		// Maintain one <audio> element per region; sync its position/volume/rate
+		// with the main video on every currentTime/isPlaying change.
+		const audioElementsRef = useRef(new Map<string, HTMLAudioElement>());
+
+		useEffect(() => {
+			const activeIds = new Set(audioRegions.map((r) => r.id));
+			const map = audioElementsRef.current;
+			// Remove elements for regions that are gone.
+			for (const [id, el] of map) {
+				if (!activeIds.has(id)) {
+					el.pause();
+					el.src = "";
+					map.delete(id);
+				}
+			}
+			// Create elements for new regions or reset src when sourcePath changes.
+			for (const region of audioRegions) {
+				const existing = map.get(region.id);
+				if (!existing) {
+					const audio = document.createElement("audio");
+					audio.preload = "auto";
+					audio.src = region.sourcePath;
+					audio.crossOrigin = "anonymous";
+					map.set(region.id, audio);
+				} else if (existing.src !== region.sourcePath) {
+					existing.src = region.sourcePath;
+				}
+			}
+			return undefined;
+		}, [audioRegions]);
+
+		useEffect(() => {
+			return () => {
+				for (const el of audioElementsRef.current.values()) {
+					el.pause();
+					el.src = "";
+				}
+				audioElementsRef.current.clear();
+			};
+		}, []);
+
+		useEffect(() => {
+			const currentTimeMs = currentTime * 1000;
+			const activeSpeedRegion =
+				speedRegions.find((r) => currentTimeMs >= r.startMs && currentTimeMs < r.endMs) ?? null;
+			const playbackRate = activeSpeedRegion ? activeSpeedRegion.speed : 1;
+
+			for (const region of audioRegions) {
+				const audio = audioElementsRef.current.get(region.id);
+				if (!audio) continue;
+				const inRegion = currentTimeMs >= region.startMs && currentTimeMs < region.endMs;
+				audio.volume = Math.min(1, Math.max(0, region.volume));
+				audio.playbackRate = playbackRate;
+				if (!inRegion) {
+					if (!audio.paused) audio.pause();
+					continue;
+				}
+				// Compute the target source time for this instant.
+				const targetSec = (currentTimeMs - region.startMs + region.sourceOffsetMs) / 1000;
+				if (Math.abs(audio.currentTime - targetSec) > 0.15) {
+					try {
+						audio.currentTime = Math.max(0, targetSec);
+					} catch {
+						// Seek can throw if readyState is too low — ignore and retry next tick.
+					}
+				}
+				if (isPlaying) {
+					audio.play().catch(() => {
+						// Autoplay restrictions — preview will catch up on user action.
+					});
+				} else if (!audio.paused) {
+					audio.pause();
+				}
+			}
+		}, [currentTime, isPlaying, speedRegions, audioRegions]);
 
 		useEffect(() => {
 			let mounted = true;

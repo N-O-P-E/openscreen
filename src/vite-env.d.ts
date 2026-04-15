@@ -75,6 +75,13 @@ interface Window {
 			canceled?: boolean;
 		}>;
 		openVideoFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
+		openAudioFilePicker: () => Promise<{
+			success: boolean;
+			path?: string;
+			canceled?: boolean;
+			message?: string;
+			error?: string;
+		}>;
 		setCurrentVideoPath: (path: string) => Promise<{ success: boolean }>;
 		setCurrentRecordingSession: (
 			session: import("./lib/recordingSession").RecordingSession | null,

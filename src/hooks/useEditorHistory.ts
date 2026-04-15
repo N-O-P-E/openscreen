@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import type {
 	AnnotationRegion,
+	AudioRegion,
 	CropRegion,
 	SpeedRegion,
 	TrimRegion,
@@ -27,6 +28,7 @@ export interface EditorState {
 	trimRegions: TrimRegion[];
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
+	audioRegions: AudioRegion[];
 	webcamKeyframes: WebcamKeyframe[];
 	cropRegion: CropRegion;
 	wallpaper: string;
@@ -47,6 +49,7 @@ export const INITIAL_EDITOR_STATE: EditorState = {
 	trimRegions: [],
 	speedRegions: [],
 	annotationRegions: [],
+	audioRegions: [],
 	webcamKeyframes: [],
 	cropRegion: DEFAULT_CROP_REGION,
 	wallpaper: "/wallpapers/wallpaper1.jpg",

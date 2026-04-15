@@ -14,7 +14,8 @@
 		"pressAnnotation": "Press A to add annotation",
 		"pressBlur": "Press B to add blur region",
 		"pressSpeed": "Press S to add speed",
-		"pressWebcam": "Press W to add webcam"
+		"pressWebcam": "Press W to add webcam",
+		"importAudio": "+ Import audio (I)"
 	},
 	"labels": {
 		"pan": "Pan",
@@ -26,7 +27,8 @@
 		"blurItem": "Blur {{index}}",
 		"imageItem": "Image",
 		"emptyText": "Empty text",
-		"webcamItem": "Cam {{index}}"
+		"webcamItem": "Cam {{index}}",
+		"audioItem": "Audio {{index}}"
 	},
 	"emptyState": {
 		"noVideo": "No Video Loaded",

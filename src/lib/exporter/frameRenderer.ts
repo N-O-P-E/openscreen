@@ -462,7 +462,11 @@ export class FrameRenderer {
 		// Calculate scale to fit in viewport
 		// Padding is a percentage (0-100), where 50% ~ 0.8 scale
 		// Vertical stack ignores padding — it's full-bleed
-		const effectivePadding = this.config.webcamLayoutPreset === "vertical-stack" ? 0 : padding;
+		const effectivePadding =
+			this.config.webcamLayoutPreset === "vertical-stack" ||
+			this.config.webcamLayoutPreset === "webcam-only"
+				? 0
+				: padding;
 		const paddingScale = 1.0 - (effectivePadding / 100) * 0.4;
 		const viewportWidth = width * paddingScale;
 		const viewportHeight = height * paddingScale;
@@ -771,8 +775,12 @@ export class FrameRenderer {
 			console.warn("[FrameRenderer] No background sprite found during compositing!");
 		}
 
+		const hideScreen = this.config.webcamLayoutPreset === "webcam-only";
+
 		// Draw video layer with shadows on top of background
-		if (
+		if (hideScreen) {
+			// Fullscreen-webcam mode: screen recording is not rendered.
+		} else if (
 			this.config.showShadow &&
 			this.config.shadowIntensity > 0 &&
 			this.shadowCanvas &&
