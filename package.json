@@ -29,7 +29,8 @@
 		"test:browser": "vitest --config vitest.browser.config.ts --run",
 		"test:browser:install": "playwright install --with-deps chromium-headless-shell",
 		"test:e2e": "playwright test",
-		"prepare": "husky"
+		"prepare": "husky",
+		"postinstall": "electron-builder install-app-deps"
 	},
 	"dependencies": {
 		"@fix-webm-duration/fix": "^1.0.1",
@@ -88,9 +89,8 @@
 		"@vitest/browser-playwright": "^4.0.16",
 		"autoprefixer": "^10.4.21",
 		"electron": "^39.2.7",
-		"electron-builder": "^26.7.0",
+		"electron-builder": "25.1.8",
 		"electron-icon-builder": "^2.0.1",
-		"electron-rebuild": "^3.2.9",
 		"fast-check": "^4.5.2",
 		"husky": "^9.1.7",
 		"jsdom": "^29.0.1",
