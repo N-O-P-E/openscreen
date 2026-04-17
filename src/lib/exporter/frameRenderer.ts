@@ -37,6 +37,7 @@ import {
 } from "@/components/video-editor/videoPlayback/cursorFollowUtils";
 import { clampFocusToStage as clampFocusToStageUtil } from "@/components/video-editor/videoPlayback/focusUtils";
 import { computeWebcamStateAtTime } from "@/components/video-editor/videoPlayback/webcamKeyframeUtils";
+import { computeWebcamZoomShrink } from "@/components/video-editor/videoPlayback/webcamZoomShrink";
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
@@ -813,6 +814,19 @@ export class FrameRenderer {
 			const preset = getWebcamLayoutPresetDefinition(this.config.webcamLayoutPreset);
 			const shape = webcamRect.maskShape ?? this.config.webcamMaskShape ?? "rectangle";
 			ctx.save();
+			const shrink = computeWebcamZoomShrink({
+				zoomProgress: this.animationState.progress,
+				layoutPreset: this.config.webcamLayoutPreset,
+				webcamRect,
+				stageSize: { width: w, height: h },
+			});
+			if (shrink.scale !== 1) {
+				const anchorX = webcamRect.x + shrink.originX * webcamRect.width;
+				const anchorY = webcamRect.y + shrink.originY * webcamRect.height;
+				ctx.translate(anchorX, anchorY);
+				ctx.scale(shrink.scale, shrink.scale);
+				ctx.translate(-anchorX, -anchorY);
+			}
 			drawCanvasClipPath(
 				ctx,
 				webcamRect.x,

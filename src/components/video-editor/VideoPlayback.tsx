@@ -63,6 +63,7 @@ import { clamp01 } from "./videoPlayback/mathUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { createVideoEventHandlers } from "./videoPlayback/videoEventHandlers";
 import { computeWebcamStateAtTime } from "./videoPlayback/webcamKeyframeUtils";
+import { computeWebcamZoomShrink } from "./videoPlayback/webcamZoomShrink";
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
@@ -183,6 +184,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 	) => {
 		const videoRef = useRef<HTMLVideoElement | null>(null);
 		const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
+		const webcamWrapperRef = useRef<HTMLDivElement | null>(null);
+		const webcamLayoutRef = useRef<StyledRenderRect | null>(null);
+		const webcamLayoutPresetRef = useRef<WebcamLayoutPreset | undefined>(undefined);
 		const containerRef = useRef<HTMLDivElement | null>(null);
 		const appRef = useRef<Application | null>(null);
 		const videoSpriteRef = useRef<Sprite | null>(null);
@@ -374,6 +378,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		useEffect(() => {
 			layoutVideoContentRef.current = layoutVideoContent;
 		}, [layoutVideoContent]);
+
+		useEffect(() => {
+			webcamLayoutRef.current = webcamLayout;
+		}, [webcamLayout]);
+
+		useEffect(() => {
+			webcamLayoutPresetRef.current = webcamLayoutPreset;
+		}, [webcamLayoutPreset]);
 
 		const setOverlayRefs = useCallback((node: HTMLDivElement | null) => {
 			overlayRef.current = node;
@@ -1110,6 +1122,18 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					motionIntensity,
 					motionVector,
 				);
+
+				const webcamWrapper = webcamWrapperRef.current;
+				if (webcamWrapper) {
+					const shrink = computeWebcamZoomShrink({
+						zoomProgress: state.progress,
+						layoutPreset: webcamLayoutPresetRef.current,
+						webcamRect: webcamLayoutRef.current,
+						stageSize: stageSizeRef.current,
+					});
+					webcamWrapper.style.transform = `scale(${shrink.scale})`;
+					webcamWrapper.style.transformOrigin = `${shrink.originX * 100}% ${shrink.originY * 100}%`;
+				}
 			};
 
 			app.ticker.add(ticker);
@@ -1405,6 +1429,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						const useClipPath = !!clipPath;
 						return (
 							<div
+								ref={webcamWrapperRef}
 								className="absolute"
 								style={{
 									left: webcamLayout?.x ?? 0,
