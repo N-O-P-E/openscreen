@@ -2,6 +2,7 @@ import type {
 	AnnotationRegion,
 	CropRegion,
 	SpeedRegion,
+	TimedCropRegion,
 	TrimRegion,
 	WebcamKeyframe,
 	WebcamLayoutPreset,
@@ -23,6 +24,7 @@ interface VideoExporterConfig extends ExportConfig {
 	webcamVideoUrl?: string;
 	wallpaper: string;
 	zoomRegions: ZoomRegion[];
+	cropRegions?: TimedCropRegion[];
 	trimRegions?: TrimRegion[];
 	speedRegions?: SpeedRegion[];
 	showShadow: boolean;
@@ -129,6 +131,7 @@ export class VideoExporter {
 				height: this.config.height,
 				wallpaper: this.config.wallpaper,
 				zoomRegions: this.config.zoomRegions,
+				cropRegions: this.config.cropRegions,
 				showShadow: this.config.showShadow,
 				shadowIntensity: this.config.shadowIntensity,
 				showBlur: this.config.showBlur,

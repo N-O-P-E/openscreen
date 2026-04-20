@@ -41,6 +41,25 @@ export interface ZoomRegion {
 	depth: ZoomDepth;
 	focus: ZoomFocus;
 	focusMode?: ZoomFocusMode;
+	/** Optional freeform scale (e.g. 1.1). When set, overrides the preset depth value. */
+	customScale?: number;
+}
+
+/** Allowed range for custom zoom values. */
+export const MIN_CUSTOM_ZOOM_SCALE = 1.05;
+export const MAX_CUSTOM_ZOOM_SCALE = 10;
+
+export function clampCustomZoomScale(scale: number): number {
+	if (!Number.isFinite(scale)) return MIN_CUSTOM_ZOOM_SCALE;
+	return Math.min(MAX_CUSTOM_ZOOM_SCALE, Math.max(MIN_CUSTOM_ZOOM_SCALE, scale));
+}
+
+/** Resolves the effective zoom scale for a region, honoring customScale when set. */
+export function getRegionZoomScale(region: ZoomRegion): number {
+	if (typeof region.customScale === "number" && Number.isFinite(region.customScale)) {
+		return clampCustomZoomScale(region.customScale);
+	}
+	return ZOOM_DEPTH_SCALES[region.depth];
 }
 
 export interface CursorTelemetryPoint {
@@ -181,6 +200,41 @@ export const DEFAULT_CROP_REGION: CropRegion = {
 	width: 1,
 	height: 1,
 };
+
+/**
+ * Time-ranged crop region. When active at the current playhead, the specified
+ * rectangle of the screen is scaled up to fill the screen's canvas slot.
+ * Transitions are instant (no interpolation). Webcam rendering is not affected.
+ */
+export interface TimedCropRegion {
+	id: string;
+	startMs: number;
+	endMs: number;
+	/** Normalized bounds (0-1) relative to the source video frame. */
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+export const DEFAULT_TIMED_CROP_REGION: Omit<TimedCropRegion, "id" | "startMs" | "endMs"> = {
+	x: 0.25,
+	y: 0.25,
+	width: 0.5,
+	height: 0.5,
+};
+
+export function findActiveTimedCropRegion(
+	regions: TimedCropRegion[],
+	timeMs: number,
+): TimedCropRegion | null {
+	if (!regions || regions.length === 0) return null;
+	for (let i = regions.length - 1; i >= 0; i--) {
+		const r = regions[i];
+		if (timeMs >= r.startMs && timeMs <= r.endMs) return r;
+	}
+	return null;
+}
 
 export type PlaybackSpeed = number;
 

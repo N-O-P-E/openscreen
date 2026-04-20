@@ -7,6 +7,7 @@ import {
 	type AudioRegion,
 	type CropRegion,
 	clampAudioVolume,
+	clampCustomZoomScale,
 	clampPlaybackSpeed,
 	DEFAULT_ANNOTATION_POSITION,
 	DEFAULT_ANNOTATION_SIZE,
@@ -26,8 +27,10 @@ import {
 	MAX_BLUR_INTENSITY,
 	MAX_PLAYBACK_SPEED,
 	MIN_BLUR_INTENSITY,
+	MIN_CUSTOM_ZOOM_SCALE,
 	MIN_PLAYBACK_SPEED,
 	type SpeedRegion,
+	type TimedCropRegion,
 	type TrimRegion,
 	type WebcamKeyframe,
 	type WebcamLayoutPreset,
@@ -55,6 +58,7 @@ export interface ProjectEditorState {
 	borderRadius: number;
 	padding: number;
 	cropRegion: CropRegion;
+	cropRegions: TimedCropRegion[];
 	zoomRegions: ZoomRegion[];
 	trimRegions: TrimRegion[];
 	speedRegions: SpeedRegion[];
@@ -201,6 +205,12 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 
+					const customScaleRaw = (region as { customScale?: unknown }).customScale;
+					const customScale =
+						isFiniteNumber(customScaleRaw) && customScaleRaw >= MIN_CUSTOM_ZOOM_SCALE
+							? clampCustomZoomScale(customScaleRaw)
+							: undefined;
+
 					return {
 						id: region.id,
 						startMs,
@@ -211,7 +221,26 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 							cy: clamp(isFiniteNumber(region.focus?.cy) ? region.focus.cy : 0.5, 0, 1),
 						},
 						focusMode: region.focusMode === "auto" ? "auto" : "manual",
+						customScale,
 					};
+				})
+		: [];
+
+	const normalizedCropRegions: TimedCropRegion[] = Array.isArray(editor.cropRegions)
+		? editor.cropRegions
+				.filter((region): region is TimedCropRegion =>
+					Boolean(region && typeof region.id === "string"),
+				)
+				.map((region) => {
+					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
+					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
+					const endMs = Math.max(startMs + 1, rawEnd);
+					const x = clamp(isFiniteNumber(region.x) ? region.x : 0, 0, 1);
+					const y = clamp(isFiniteNumber(region.y) ? region.y : 0, 0, 1);
+					const width = clamp(isFiniteNumber(region.width) ? region.width : 1, 0.01, 1 - x);
+					const height = clamp(isFiniteNumber(region.height) ? region.height : 1, 0.01, 1 - y);
+					return { id: region.id, startMs, endMs, x, y, width, height };
 				})
 		: [];
 
@@ -476,6 +505,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			height: cropHeight,
 		},
 		zoomRegions: normalizedZoomRegions,
+		cropRegions: normalizedCropRegions,
 		trimRegions: normalizedTrimRegions,
 		speedRegions: normalizedSpeedRegions,
 		annotationRegions: normalizedAnnotationRegions,

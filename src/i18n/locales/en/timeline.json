@@ -2,6 +2,7 @@
 	"buttons": {
 		"addZoom": "Add Zoom (Z)",
 		"suggestZooms": "Suggest Zooms from Cursor",
+		"addCrop": "Add Crop (C)",
 		"addTrim": "Add Trim (T)",
 		"addAnnotation": "Add Annotation (A)",
 		"addBlur": "Add Blur (B)",
@@ -10,6 +11,7 @@
 	},
 	"hints": {
 		"pressZoom": "Press Z to add zoom",
+		"pressCrop": "Press C to add crop",
 		"pressTrim": "Press T to add trim",
 		"pressAnnotation": "Press A to add annotation",
 		"pressBlur": "Press B to add blur region",
@@ -21,6 +23,7 @@
 		"pan": "Pan",
 		"zoom": "Zoom",
 		"zoomItem": "Zoom {{index}}",
+		"cropItem": "Crop {{index}}",
 		"trimItem": "Trim {{index}}",
 		"speedItem": "Speed {{index}}",
 		"annotationItem": "Annotation",
@@ -37,6 +40,8 @@
 	"errors": {
 		"cannotPlaceZoom": "Cannot place zoom here",
 		"zoomExistsAtLocation": "Zoom already exists at this location or not enough space available.",
+		"cannotPlaceCrop": "Cannot place crop here",
+		"cropExistsAtLocation": "Crop already exists at this location or not enough space available.",
 		"zoomSuggestionUnavailable": "Zoom suggestion handler unavailable",
 		"noCursorTelemetry": "No cursor telemetry available",
 		"noCursorTelemetryDescription": "Record a screencast first to generate cursor-based suggestions.",

@@ -3,6 +3,7 @@ import { useTimelineContext } from "dnd-timeline";
 import {
 	Check,
 	ChevronDown,
+	Crop,
 	Gauge,
 	MessageSquare,
 	Plus,
@@ -33,6 +34,7 @@ import type {
 	AudioRegion,
 	CursorTelemetryPoint,
 	SpeedRegion,
+	TimedCropRegion,
 	TrimRegion,
 	WebcamKeyframe,
 	ZoomFocus,
@@ -45,6 +47,7 @@ import TimelineWrapper from "./TimelineWrapper";
 import { detectZoomDwellCandidates, normalizeCursorTelemetry } from "./zoomSuggestionUtils";
 
 const ZOOM_ROW_ID = "row-zoom";
+const CROP_ROW_ID = "row-crop";
 const TRIM_ROW_ID = "row-trim";
 const ANNOTATION_ROW_ID = "row-annotation";
 const BLUR_ROW_ID = "row-blur";
@@ -68,6 +71,12 @@ interface TimelineEditorProps {
 	onZoomDelete: (id: string) => void;
 	selectedZoomId: string | null;
 	onSelectZoom: (id: string | null) => void;
+	cropRegions?: TimedCropRegion[];
+	onCropAdded?: (span: Span) => void;
+	onCropSpanChange?: (id: string, span: Span) => void;
+	onCropDelete?: (id: string) => void;
+	selectedCropId?: string | null;
+	onSelectCrop?: (id: string | null) => void;
 	trimRegions?: TrimRegion[];
 	onTrimAdded?: (span: Span) => void;
 	onTrimSpanChange?: (id: string, span: Span) => void;
@@ -122,7 +131,7 @@ interface TimelineRenderItem {
 	label: string;
 	zoomDepth?: number;
 	speedValue?: number;
-	variant: "zoom" | "trim" | "annotation" | "speed" | "blur" | "webcam" | "audio";
+	variant: "zoom" | "trim" | "annotation" | "speed" | "blur" | "webcam" | "audio" | "crop";
 }
 
 const SCALE_CANDIDATES = [
@@ -549,6 +558,7 @@ function Timeline({
 	onSeek,
 	onRangeChange,
 	onSelectZoom,
+	onSelectCrop,
 	onSelectTrim,
 	onSelectAnnotation,
 	onSelectBlur,
@@ -557,6 +567,7 @@ function Timeline({
 	onSelectAudio,
 	onAudioImport,
 	selectedZoomId,
+	selectedCropId,
 	selectedTrimId,
 	selectedAnnotationId,
 	selectedBlurId,
@@ -571,6 +582,7 @@ function Timeline({
 	onSeek?: (time: number) => void;
 	onRangeChange?: (updater: (previous: Range) => Range) => void;
 	onSelectZoom?: (id: string | null) => void;
+	onSelectCrop?: (id: string | null) => void;
 	onSelectTrim?: (id: string | null) => void;
 	onSelectAnnotation?: (id: string | null) => void;
 	onSelectBlur?: (id: string | null) => void;
@@ -579,6 +591,7 @@ function Timeline({
 	onSelectAudio?: (id: string | null) => void;
 	onAudioImport?: () => void;
 	selectedZoomId: string | null;
+	selectedCropId?: string | null;
 	selectedTrimId?: string | null;
 	selectedAnnotationId?: string | null;
 	selectedBlurId?: string | null;
@@ -680,6 +693,7 @@ function Timeline({
 	);
 
 	const zoomItems = items.filter((item) => item.rowId === ZOOM_ROW_ID);
+	const cropItems = items.filter((item) => item.rowId === CROP_ROW_ID);
 	const trimItems = items.filter((item) => item.rowId === TRIM_ROW_ID);
 	const annotationItems = items.filter((item) => item.rowId === ANNOTATION_ROW_ID);
 	const blurItems = items.filter((item) => item.rowId === BLUR_ROW_ID);
@@ -717,6 +731,22 @@ function Timeline({
 						onSelect={() => onSelectZoom?.(item.id)}
 						zoomDepth={item.zoomDepth}
 						variant="zoom"
+					>
+						{item.label}
+					</Item>
+				))}
+			</Row>
+
+			<Row id={CROP_ROW_ID} isEmpty={cropItems.length === 0} hint={t("hints.pressCrop")}>
+				{cropItems.map((item) => (
+					<Item
+						id={item.id}
+						key={item.id}
+						rowId={item.rowId}
+						span={item.span}
+						isSelected={item.id === selectedCropId}
+						onSelect={() => onSelectCrop?.(item.id)}
+						variant="crop"
 					>
 						{item.label}
 					</Item>
@@ -853,6 +883,12 @@ export default function TimelineEditor({
 	onZoomDelete,
 	selectedZoomId,
 	onSelectZoom,
+	cropRegions = [],
+	onCropAdded,
+	onCropSpanChange,
+	onCropDelete,
+	selectedCropId,
+	onSelectCrop,
 	trimRegions = [],
 	onTrimAdded,
 	onTrimSpanChange,
@@ -954,6 +990,12 @@ export default function TimelineEditor({
 		onZoomDelete(selectedZoomId);
 		onSelectZoom(null);
 	}, [selectedZoomId, onZoomDelete, onSelectZoom]);
+
+	const deleteSelectedCrop = useCallback(() => {
+		if (!selectedCropId || !onCropDelete || !onSelectCrop) return;
+		onCropDelete(selectedCropId);
+		onSelectCrop(null);
+	}, [selectedCropId, onCropDelete, onSelectCrop]);
 
 	// Delete selected trim item
 	const deleteSelectedTrim = useCallback(() => {
@@ -1132,6 +1174,31 @@ export default function TimelineEditor({
 		const actualDuration = Math.min(defaultRegionDurationMs, gapToNext);
 		onZoomAdded({ start: startPos, end: startPos + actualDuration });
 	}, [videoDuration, totalMs, currentTimeMs, zoomRegions, onZoomAdded, defaultRegionDurationMs, t]);
+
+	const handleAddCrop = useCallback(() => {
+		if (!videoDuration || videoDuration === 0 || totalMs === 0) return;
+		if (!onCropAdded) return;
+		const defaultDuration = Math.min(defaultRegionDurationMs, totalMs);
+		if (defaultDuration <= 0) return;
+
+		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
+		const sorted = [...cropRegions].sort((a, b) => a.startMs - b.startMs);
+		const nextRegion = sorted.find((region) => region.startMs > startPos);
+		const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
+
+		const isOverlapping = sorted.some(
+			(region) => startPos >= region.startMs && startPos < region.endMs,
+		);
+		if (isOverlapping || gapToNext <= 0) {
+			toast.error(t("errors.cannotPlaceCrop"), {
+				description: t("errors.cropExistsAtLocation"),
+			});
+			return;
+		}
+
+		const actualDuration = Math.min(defaultRegionDurationMs, gapToNext);
+		onCropAdded({ start: startPos, end: startPos + actualDuration });
+	}, [videoDuration, totalMs, currentTimeMs, cropRegions, onCropAdded, defaultRegionDurationMs, t]);
 
 	const handleSuggestZooms = useCallback(() => {
 		if (!videoDuration || videoDuration === 0 || totalMs === 0) {
@@ -1358,6 +1425,9 @@ export default function TimelineEditor({
 			if (matchesShortcut(e, keyShortcuts.addZoom, isMac)) {
 				handleAddZoom();
 			}
+			if (matchesShortcut(e, keyShortcuts.addCrop, isMac)) {
+				handleAddCrop();
+			}
 			if (matchesShortcut(e, keyShortcuts.addTrim, isMac)) {
 				handleAddTrim();
 			}
@@ -1432,6 +1502,8 @@ export default function TimelineEditor({
 					deleteSelectedKeyframe();
 				} else if (selectedZoomId) {
 					deleteSelectedZoom();
+				} else if (selectedCropId) {
+					deleteSelectedCrop();
 				} else if (selectedTrimId) {
 					deleteSelectedTrim();
 				} else if (selectedAnnotationId) {
@@ -1452,6 +1524,7 @@ export default function TimelineEditor({
 	}, [
 		addKeyframe,
 		handleAddZoom,
+		handleAddCrop,
 		handleAddTrim,
 		handleAddAnnotation,
 		handleAddBlur,
@@ -1459,6 +1532,7 @@ export default function TimelineEditor({
 		handleAddWebcamKeyframe,
 		deleteSelectedKeyframe,
 		deleteSelectedZoom,
+		deleteSelectedCrop,
 		deleteSelectedTrim,
 		deleteSelectedAnnotation,
 		deleteSelectedBlur,
@@ -1469,6 +1543,7 @@ export default function TimelineEditor({
 		onAudioSplit,
 		selectedKeyframeId,
 		selectedZoomId,
+		selectedCropId,
 		selectedTrimId,
 		selectedAnnotationId,
 		selectedBlurId,
@@ -1502,6 +1577,14 @@ export default function TimelineEditor({
 			label: t("labels.zoomItem", { index: String(index + 1) }),
 			zoomDepth: region.depth,
 			variant: "zoom",
+		}));
+
+		const crops: TimelineRenderItem[] = cropRegions.map((region, index) => ({
+			id: region.id,
+			rowId: CROP_ROW_ID,
+			span: { start: region.startMs, end: region.endMs },
+			label: t("labels.cropItem", { index: String(index + 1) }),
+			variant: "crop",
 		}));
 
 		const trims: TimelineRenderItem[] = trimRegions.map((region, index) => ({
@@ -1578,9 +1661,19 @@ export default function TimelineEditor({
 			};
 		});
 
-		return [...zooms, ...trims, ...annotations, ...blurs, ...speeds, ...webcams, ...audios];
+		return [
+			...zooms,
+			...crops,
+			...trims,
+			...annotations,
+			...blurs,
+			...speeds,
+			...webcams,
+			...audios,
+		];
 	}, [
 		zoomRegions,
+		cropRegions,
 		trimRegions,
 		annotationRegions,
 		blurRegions,
@@ -1593,6 +1686,7 @@ export default function TimelineEditor({
 	// Flat list of all non-annotation region spans for neighbour-clamping during drag/resize
 	const allRegionSpans = useMemo(() => {
 		const zooms = zoomRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs }));
+		const crops = cropRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs }));
 		const trims = trimRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs }));
 		const speeds = speedRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs }));
 		const webcams = webcamKeyframes.map((kf) => ({
@@ -1600,14 +1694,16 @@ export default function TimelineEditor({
 			start: kf.timeMs,
 			end: kf.timeMs,
 		}));
-		return [...zooms, ...trims, ...speeds, ...webcams];
-	}, [zoomRegions, trimRegions, speedRegions, webcamKeyframes]);
+		return [...zooms, ...crops, ...trims, ...speeds, ...webcams];
+	}, [zoomRegions, cropRegions, trimRegions, speedRegions, webcamKeyframes]);
 
 	const handleItemSpanChange = useCallback(
 		(id: string, span: Span) => {
-			// Check if it's a zoom, trim, speed, annotation, blur, or webcam item
+			// Check if it's a zoom, crop, trim, speed, annotation, blur, or webcam item
 			if (zoomRegions.some((r) => r.id === id)) {
 				onZoomSpanChange(id, span);
+			} else if (cropRegions.some((r) => r.id === id)) {
+				onCropSpanChange?.(id, span);
 			} else if (trimRegions.some((r) => r.id === id)) {
 				onTrimSpanChange?.(id, span);
 			} else if (speedRegions.some((r) => r.id === id)) {
@@ -1626,6 +1722,7 @@ export default function TimelineEditor({
 		},
 		[
 			zoomRegions,
+			cropRegions,
 			trimRegions,
 			speedRegions,
 			annotationRegions,
@@ -1633,6 +1730,7 @@ export default function TimelineEditor({
 			webcamKeyframes,
 			audioRegions,
 			onZoomSpanChange,
+			onCropSpanChange,
 			onTrimSpanChange,
 			onSpeedSpanChange,
 			onAnnotationSpanChange,
@@ -1677,6 +1775,15 @@ export default function TimelineEditor({
 						title={t("buttons.suggestZooms")}
 					>
 						<WandSparkles className="w-4 h-4" />
+					</Button>
+					<Button
+						onClick={handleAddCrop}
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7 text-slate-400 hover:text-[#14b8a6] hover:bg-[#14b8a6]/10 transition-all"
+						title={t("buttons.addCrop")}
+					>
+						<Crop className="w-4 h-4" />
 					</Button>
 					<Button
 						onClick={handleAddTrim}
@@ -1808,6 +1915,7 @@ export default function TimelineEditor({
 						onSeek={onSeek}
 						onRangeChange={setRange}
 						onSelectZoom={onSelectZoom}
+						onSelectCrop={onSelectCrop}
 						onSelectTrim={onSelectTrim}
 						onSelectAnnotation={onSelectAnnotation}
 						onSelectBlur={onSelectBlur}
@@ -1816,6 +1924,7 @@ export default function TimelineEditor({
 						onSelectAudio={onSelectAudio}
 						onAudioImport={onAudioImport}
 						selectedZoomId={selectedZoomId}
+						selectedCropId={selectedCropId}
 						selectedTrimId={selectedTrimId}
 						selectedAnnotationId={selectedAnnotationId}
 						selectedBlurId={selectedBlurId}

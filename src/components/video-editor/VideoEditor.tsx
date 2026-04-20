@@ -58,6 +58,7 @@ import {
 	type BlurData,
 	type CursorTelemetryPoint,
 	clampAudioVolume,
+	clampCustomZoomScale,
 	clampFocusToDepth,
 	DEFAULT_ANNOTATION_POSITION,
 	DEFAULT_ANNOTATION_SIZE,
@@ -66,10 +67,12 @@ import {
 	DEFAULT_BLUR_DATA,
 	DEFAULT_FIGURE_DATA,
 	DEFAULT_PLAYBACK_SPEED,
+	DEFAULT_TIMED_CROP_REGION,
 	DEFAULT_ZOOM_DEPTH,
 	type FigureData,
 	type PlaybackSpeed,
 	type SpeedRegion,
+	type TimedCropRegion,
 	type TrimRegion,
 	type WebcamKeyframe,
 	type WebcamMaskShape,
@@ -95,6 +98,7 @@ export default function VideoEditor() {
 
 	const {
 		zoomRegions,
+		cropRegions,
 		trimRegions,
 		speedRegions,
 		annotationRegions,
@@ -131,6 +135,7 @@ export default function VideoEditor() {
 	durationRef.current = duration;
 	const [cursorTelemetry, setCursorTelemetry] = useState<CursorTelemetryPoint[]>([]);
 	const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
+	const [selectedCropId, setSelectedCropId] = useState<string | null>(null);
 	const [selectedTrimId, setSelectedTrimId] = useState<string | null>(null);
 	const [selectedSpeedId, setSelectedSpeedId] = useState<string | null>(null);
 	const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
@@ -160,6 +165,7 @@ export default function VideoEditor() {
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
 
 	const nextZoomIdRef = useRef(1);
+	const nextCropIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
 	const nextAudioIdRef = useRef(1);
@@ -237,6 +243,7 @@ export default function VideoEditor() {
 				padding: normalizedEditor.padding,
 				cropRegion: normalizedEditor.cropRegion,
 				zoomRegions: normalizedEditor.zoomRegions,
+				cropRegions: normalizedEditor.cropRegions,
 				trimRegions: normalizedEditor.trimRegions,
 				speedRegions: normalizedEditor.speedRegions,
 				annotationRegions: normalizedEditor.annotationRegions,
@@ -255,6 +262,7 @@ export default function VideoEditor() {
 			setGifSizePreset(normalizedEditor.gifSizePreset);
 
 			setSelectedZoomId(null);
+			setSelectedCropId(null);
 			setSelectedTrimId(null);
 			setSelectedSpeedId(null);
 			setSelectedAnnotationId(null);
@@ -265,6 +273,10 @@ export default function VideoEditor() {
 			nextZoomIdRef.current = deriveNextId(
 				"zoom",
 				normalizedEditor.zoomRegions.map((region) => region.id),
+			);
+			nextCropIdRef.current = deriveNextId(
+				"crop",
+				normalizedEditor.cropRegions.map((region) => region.id),
 			);
 			nextTrimIdRef.current = deriveNextId(
 				"trim",
@@ -318,6 +330,7 @@ export default function VideoEditor() {
 			padding,
 			cropRegion,
 			zoomRegions,
+			cropRegions,
 			trimRegions,
 			speedRegions,
 			annotationRegions,
@@ -343,6 +356,7 @@ export default function VideoEditor() {
 		padding,
 		cropRegion,
 		zoomRegions,
+		cropRegions,
 		trimRegions,
 		speedRegions,
 		annotationRegions,
@@ -483,6 +497,7 @@ export default function VideoEditor() {
 				padding,
 				cropRegion,
 				zoomRegions,
+				cropRegions,
 				trimRegions,
 				speedRegions,
 				annotationRegions,
@@ -541,6 +556,7 @@ export default function VideoEditor() {
 			padding,
 			cropRegion,
 			zoomRegions,
+			cropRegions,
 			trimRegions,
 			speedRegions,
 			annotationRegions,
@@ -692,6 +708,7 @@ export default function VideoEditor() {
 	const handleSelectZoom = useCallback((id: string | null) => {
 		setSelectedZoomId(id);
 		if (id) {
+			setSelectedCropId(null);
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
@@ -704,6 +721,7 @@ export default function VideoEditor() {
 		setSelectedTrimId(id);
 		if (id) {
 			setSelectedZoomId(null);
+			setSelectedCropId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
 			setSelectedWebcamKeyframeId(null);
@@ -715,6 +733,7 @@ export default function VideoEditor() {
 		setSelectedAnnotationId(id);
 		if (id) {
 			setSelectedZoomId(null);
+			setSelectedCropId(null);
 			setSelectedTrimId(null);
 			setSelectedBlurId(null);
 			setSelectedWebcamKeyframeId(null);
@@ -726,6 +745,7 @@ export default function VideoEditor() {
 		setSelectedBlurId(id);
 		if (id) {
 			setSelectedZoomId(null);
+			setSelectedCropId(null);
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedSpeedId(null);
@@ -844,7 +864,25 @@ export default function VideoEditor() {
 						? {
 								...region,
 								depth,
+								customScale: undefined,
 								focus: clampFocusToDepth(region.focus, depth),
+							}
+						: region,
+				),
+			}));
+		},
+		[selectedZoomId, pushState],
+	);
+
+	const handleZoomCustomScaleChange = useCallback(
+		(scale: number) => {
+			if (!selectedZoomId) return;
+			pushState((prev) => ({
+				zoomRegions: prev.zoomRegions.map((region) =>
+					region.id === selectedZoomId
+						? {
+								...region,
+								customScale: clampCustomZoomScale(scale),
 							}
 						: region,
 				),
@@ -876,6 +914,85 @@ export default function VideoEditor() {
 		},
 		[selectedZoomId, pushState],
 	);
+
+	const handleCropAdded = useCallback(
+		(span: Span) => {
+			const id = `crop-${nextCropIdRef.current++}`;
+			const newRegion: TimedCropRegion = {
+				id,
+				startMs: Math.round(span.start),
+				endMs: Math.round(span.end),
+				...DEFAULT_TIMED_CROP_REGION,
+			};
+			pushState((prev) => ({ cropRegions: [...prev.cropRegions, newRegion] }));
+			setSelectedCropId(id);
+			setSelectedZoomId(null);
+			setSelectedTrimId(null);
+			setSelectedSpeedId(null);
+			setSelectedAnnotationId(null);
+			setSelectedBlurId(null);
+			setSelectedAudioId(null);
+			setSelectedWebcamKeyframeId(null);
+		},
+		[pushState],
+	);
+
+	const handleCropSpanChange = useCallback(
+		(id: string, span: Span) => {
+			pushState((prev) => ({
+				cropRegions: prev.cropRegions.map((region) =>
+					region.id === id
+						? {
+								...region,
+								startMs: Math.round(span.start),
+								endMs: Math.round(span.end),
+							}
+						: region,
+				),
+			}));
+		},
+		[pushState],
+	);
+
+	const handleCropBoundsChange = useCallback(
+		(id: string, bounds: { x: number; y: number; width: number; height: number }) => {
+			const x = Math.max(0, Math.min(1, bounds.x));
+			const y = Math.max(0, Math.min(1, bounds.y));
+			const width = Math.max(0.01, Math.min(1 - x, bounds.width));
+			const height = Math.max(0.01, Math.min(1 - y, bounds.height));
+			pushState((prev) => ({
+				cropRegions: prev.cropRegions.map((region) =>
+					region.id === id ? { ...region, x, y, width, height } : region,
+				),
+			}));
+		},
+		[pushState],
+	);
+
+	const handleCropDelete = useCallback(
+		(id: string) => {
+			pushState((prev) => ({
+				cropRegions: prev.cropRegions.filter((r) => r.id !== id),
+			}));
+			if (selectedCropId === id) {
+				setSelectedCropId(null);
+			}
+		},
+		[selectedCropId, pushState],
+	);
+
+	const handleSelectCrop = useCallback((id: string | null) => {
+		setSelectedCropId(id);
+		if (id) {
+			setSelectedZoomId(null);
+			setSelectedTrimId(null);
+			setSelectedSpeedId(null);
+			setSelectedAnnotationId(null);
+			setSelectedBlurId(null);
+			setSelectedAudioId(null);
+			setSelectedWebcamKeyframeId(null);
+		}
+	}, []);
 
 	const handleTrimDelete = useCallback(
 		(id: string) => {
@@ -1668,6 +1785,12 @@ export default function VideoEditor() {
 	}, [selectedZoomId, zoomRegions]);
 
 	useEffect(() => {
+		if (selectedCropId && !cropRegions.some((region) => region.id === selectedCropId)) {
+			setSelectedCropId(null);
+		}
+	}, [selectedCropId, cropRegions]);
+
+	useEffect(() => {
 		if (selectedTrimId && !trimRegions.some((region) => region.id === selectedTrimId)) {
 			setSelectedTrimId(null);
 		}
@@ -1792,6 +1915,7 @@ export default function VideoEditor() {
 						sizePreset: settings.gifConfig.sizePreset,
 						wallpaper,
 						zoomRegions,
+						cropRegions,
 						trimRegions,
 						speedRegions,
 						showShadow: shadowIntensity > 0,
@@ -1928,6 +2052,7 @@ export default function VideoEditor() {
 						codec: "avc1.640033",
 						wallpaper,
 						zoomRegions,
+						cropRegions,
 						trimRegions,
 						speedRegions,
 						showShadow: shadowIntensity > 0,
@@ -1999,6 +2124,7 @@ export default function VideoEditor() {
 			webcamVideoPath,
 			wallpaper,
 			zoomRegions,
+			cropRegions,
 			trimRegions,
 			speedRegions,
 			shadowIntensity,
@@ -2259,6 +2385,7 @@ export default function VideoEditor() {
 											onSelectZoom={handleSelectZoom}
 											onZoomFocusChange={handleZoomFocusChange}
 											onZoomFocusDragEnd={commitState}
+											cropRegions={cropRegions}
 											isPlaying={isPlaying}
 											showShadow={shadowIntensity > 0}
 											shadowIntensity={shadowIntensity}
@@ -2322,6 +2449,12 @@ export default function VideoEditor() {
 									onZoomDelete={handleZoomDelete}
 									selectedZoomId={selectedZoomId}
 									onSelectZoom={handleSelectZoom}
+									cropRegions={cropRegions}
+									onCropAdded={handleCropAdded}
+									onCropSpanChange={handleCropSpanChange}
+									onCropDelete={handleCropDelete}
+									selectedCropId={selectedCropId}
+									onSelectCrop={handleSelectCrop}
 									trimRegions={trimRegions}
 									onTrimAdded={handleTrimAdded}
 									onTrimSpanChange={handleTrimSpanChange}
@@ -2384,6 +2517,14 @@ export default function VideoEditor() {
 							selectedZoomId ? zoomRegions.find((z) => z.id === selectedZoomId)?.depth : null
 						}
 						onZoomDepthChange={(depth) => selectedZoomId && handleZoomDepthChange(depth)}
+						selectedZoomCustomScale={
+							selectedZoomId
+								? (zoomRegions.find((z) => z.id === selectedZoomId)?.customScale ?? null)
+								: null
+						}
+						onZoomCustomScaleChange={(scale) =>
+							selectedZoomId && handleZoomCustomScaleChange(scale)
+						}
 						selectedZoomFocusMode={
 							selectedZoomId
 								? (zoomRegions.find((z) => z.id === selectedZoomId)?.focusMode ?? "manual")
@@ -2393,6 +2534,11 @@ export default function VideoEditor() {
 						hasCursorTelemetry={cursorTelemetry.length > 0}
 						selectedZoomId={selectedZoomId}
 						onZoomDelete={handleZoomDelete}
+						selectedTimedCrop={
+							selectedCropId ? (cropRegions.find((c) => c.id === selectedCropId) ?? null) : null
+						}
+						onTimedCropBoundsChange={handleCropBoundsChange}
+						onTimedCropDelete={handleCropDelete}
 						selectedTrimId={selectedTrimId}
 						onTrimDelete={handleTrimDelete}
 						shadowIntensity={shadowIntensity}

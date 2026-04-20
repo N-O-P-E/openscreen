@@ -1,6 +1,6 @@
 import type { Span } from "dnd-timeline";
 import { useItem } from "dnd-timeline";
-import { Gauge, MessageSquare, Music, Scissors, Video, ZoomIn } from "lucide-react";
+import { Crop, Gauge, MessageSquare, Music, Scissors, Video, ZoomIn } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import glassStyles from "./ItemGlass.module.css";
@@ -14,7 +14,7 @@ interface ItemProps {
 	onSelect?: () => void;
 	zoomDepth?: number;
 	speedValue?: number;
-	variant?: "zoom" | "trim" | "annotation" | "speed" | "blur" | "webcam" | "audio";
+	variant?: "zoom" | "trim" | "annotation" | "speed" | "blur" | "webcam" | "audio" | "crop";
 }
 
 // Map zoom depth to multiplier labels
@@ -59,6 +59,7 @@ export default function Item({
 	const isSpeed = variant === "speed";
 	const isWebcam = variant === "webcam";
 	const isAudio = variant === "audio";
+	const isCrop = variant === "crop";
 
 	const glassClass = isZoom
 		? glassStyles.glassGreen
@@ -68,7 +69,9 @@ export default function Item({
 				? glassStyles.glassAmber
 				: isAudio
 					? glassStyles.glassPurple
-					: glassStyles.glassYellow;
+					: isCrop
+						? glassStyles.glassTeal
+						: glassStyles.glassYellow;
 
 	const endCapColor = isZoom
 		? "#21916A"
@@ -80,7 +83,9 @@ export default function Item({
 					? "#3b82f6"
 					: isAudio
 						? "#a855f7"
-						: "#B4A046";
+						: isCrop
+							? "#14b8a6"
+							: "#B4A046";
 
 	const timeLabel = useMemo(
 		() => `${formatMs(span.start)} – ${formatMs(span.end)}`,
@@ -171,6 +176,13 @@ export default function Item({
 							) : isAudio ? (
 								<>
 									<Music className="w-3.5 h-3.5 shrink-0" />
+									<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
+										{children}
+									</span>
+								</>
+							) : isCrop ? (
+								<>
+									<Crop className="w-3.5 h-3.5 shrink-0" />
 									<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
 										{children}
 									</span>

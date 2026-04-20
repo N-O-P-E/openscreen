@@ -39,11 +39,12 @@ import {
 	type BlurData,
 	DEFAULT_WEBCAM_MASK_SHAPE,
 	DEFAULT_WEBCAM_SIZE_PRESET,
+	findActiveTimedCropRegion,
+	getRegionZoomScale,
 	type SpeedRegion,
 	type TrimRegion,
 	type WebcamKeyframe,
 	type WebcamMaskShape,
-	ZOOM_DEPTH_SCALES,
 	type ZoomDepth,
 	type ZoomFocus,
 	type ZoomRegion,
@@ -90,6 +91,7 @@ interface VideoPlaybackProps {
 	onError: (error: string) => void;
 	wallpaper?: string;
 	zoomRegions: ZoomRegion[];
+	cropRegions?: import("./types").TimedCropRegion[];
 	selectedZoomId: string | null;
 	onSelectZoom: (id: string | null) => void;
 	onZoomFocusChange: (id: string, focus: ZoomFocus) => void;
@@ -150,6 +152,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			onError,
 			wallpaper,
 			zoomRegions,
+			cropRegions = [],
 			selectedZoomId,
 			onSelectZoom,
 			onZoomFocusChange,
@@ -213,7 +216,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			x: 0,
 			y: 0,
 			appliedScale: 1,
+			isCropActive: false,
 		});
+		const cropRegionsRef = useRef<import("./types").TimedCropRegion[]>([]);
 		const blurFilterRef = useRef<BlurFilter | null>(null);
 		const motionBlurFilterRef = useRef<MotionBlurFilter | null>(null);
 		const isDraggingFocusRef = useRef(false);
@@ -549,6 +554,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		}, [zoomRegions]);
 
 		useEffect(() => {
+			cropRegionsRef.current = cropRegions;
+		}, [cropRegions]);
+
+		useEffect(() => {
 			cursorTelemetryRef.current = cursorTelemetry;
 		}, [cursorTelemetry]);
 
@@ -607,6 +616,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				x: 0,
 				y: 0,
 				appliedScale: 1,
+				isCropActive: false,
 			};
 
 			// Reset motion blur state for clean transitions
@@ -843,6 +853,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				x: 0,
 				y: 0,
 				appliedScale: 1,
+				isCropActive: false,
 			};
 
 			const blurFilter = new BlurFilter();
@@ -965,6 +976,68 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								heightRatio: ss.height / bm.height,
 							}
 						: undefined;
+
+				// Time-ranged crop regions override zoom, with no animation.
+				const activeCrop = findActiveTimedCropRegion(
+					cropRegionsRef.current,
+					currentTimeRef.current,
+				);
+				if (activeCrop) {
+					const state = animationStateRef.current;
+					const prevScale = state.appliedScale;
+					const prevX = state.x;
+					const prevY = state.y;
+					const cropScale = 1 / Math.max(activeCrop.width, activeCrop.height);
+					const focus = {
+						cx: activeCrop.x + activeCrop.width / 2,
+						cy: activeCrop.y + activeCrop.height / 2,
+					};
+					const projected = computeZoomTransform({
+						stageSize: stageSizeRef.current,
+						baseMask: baseMaskRef.current,
+						zoomScale: cropScale,
+						zoomProgress: 1,
+						focusX: focus.cx,
+						focusY: focus.cy,
+					});
+					state.scale = cropScale;
+					state.focusX = focus.cx;
+					state.focusY = focus.cy;
+					state.progress = 1;
+					state.x = projected.x;
+					state.y = projected.y;
+					state.appliedScale = projected.scale;
+					state.isCropActive = true;
+					smoothedAutoFocusRef.current = null;
+					prevTargetProgressRef.current = 1;
+
+					const motionIntensity = Math.max(
+						Math.abs(projected.scale - prevScale),
+						Math.abs(projected.x - prevX) / Math.max(1, stageSizeRef.current.width),
+						Math.abs(projected.y - prevY) / Math.max(1, stageSizeRef.current.height),
+					);
+					applyTransformFn(
+						{ scale: projected.scale, x: projected.x, y: projected.y },
+						focus,
+						motionIntensity,
+						{ x: projected.x - prevX, y: projected.y - prevY },
+					);
+					const webcamWrapperEl = webcamWrapperRef.current;
+					if (webcamWrapperEl) {
+						// Suppress webcam shrink during crop — webcam keeps its normal size.
+						const shrink = computeWebcamZoomShrink({
+							zoomProgress: 0,
+							layoutPreset: webcamLayoutPresetRef.current,
+							webcamRect: webcamLayoutRef.current,
+							stageSize: stageSizeRef.current,
+						});
+						webcamWrapperEl.style.transform = `scale(${shrink.scale})`;
+						webcamWrapperEl.style.transformOrigin = `${shrink.originX * 100}% ${shrink.originY * 100}%`;
+					}
+					return;
+				}
+				animationStateRef.current.isCropActive = false;
+
 				const { region, strength, blendedScale, transition } = findDominantRegion(
 					zoomRegionsRef.current,
 					currentTimeRef.current,
@@ -986,7 +1059,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				const shouldShowUnzoomedView = hasSelectedZoom && !isPlayingRef.current;
 
 				if (region && strength > 0 && !shouldShowUnzoomedView) {
-					const zoomScale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
+					const zoomScale = blendedScale ?? getRegionZoomScale(region);
 					const regionFocus = region.focus;
 
 					targetScaleFactor = zoomScale;

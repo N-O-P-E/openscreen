@@ -12,6 +12,7 @@ import type {
 	AnnotationRegion,
 	CropRegion,
 	SpeedRegion,
+	TimedCropRegion,
 	WebcamKeyframe,
 	WebcamLayoutPreset,
 	WebcamSizePreset,
@@ -21,7 +22,8 @@ import type {
 import {
 	DEFAULT_WEBCAM_MASK_SHAPE,
 	DEFAULT_WEBCAM_SIZE_PRESET,
-	ZOOM_DEPTH_SCALES,
+	findActiveTimedCropRegion,
+	getRegionZoomScale,
 } from "@/components/video-editor/types";
 import {
 	AUTO_FOLLOW_RAMP_DISTANCE,
@@ -66,6 +68,7 @@ interface FrameRenderConfig {
 	height: number;
 	wallpaper: string;
 	zoomRegions: ZoomRegion[];
+	cropRegions?: TimedCropRegion[];
 	showShadow: boolean;
 	shadowIntensity: number;
 	showBlur: boolean;
@@ -96,6 +99,8 @@ interface AnimationState {
 	x: number;
 	y: number;
 	appliedScale: number;
+	/** True when a TimedCropRegion is active — suppresses webcam shrink. */
+	isCropActive: boolean;
 }
 
 interface LayoutCache {
@@ -143,6 +148,7 @@ export class FrameRenderer {
 			x: 0,
 			y: 0,
 			appliedScale: 1,
+			isCropActive: false,
 		};
 	}
 
@@ -566,6 +572,45 @@ export class FrameRenderer {
 			bmEx.width > 0 && bmEx.height > 0
 				? { widthRatio: ssEx.width / bmEx.width, heightRatio: ssEx.height / bmEx.height }
 				: undefined;
+
+		// Time-ranged crop regions override zoom. Applied instantly (no easing).
+		const activeCrop = findActiveTimedCropRegion(this.config.cropRegions ?? [], timeMs);
+		if (activeCrop) {
+			const prevScale = this.animationState.appliedScale;
+			const prevX = this.animationState.x;
+			const prevY = this.animationState.y;
+			const cropScale = 1 / Math.max(activeCrop.width, activeCrop.height);
+			const focus = {
+				cx: activeCrop.x + activeCrop.width / 2,
+				cy: activeCrop.y + activeCrop.height / 2,
+			};
+			const projected = computeZoomTransform({
+				stageSize: this.layoutCache.stageSize,
+				baseMask: this.layoutCache.maskRect,
+				zoomScale: cropScale,
+				zoomProgress: 1,
+				focusX: focus.cx,
+				focusY: focus.cy,
+			});
+			this.animationState.scale = cropScale;
+			this.animationState.focusX = focus.cx;
+			this.animationState.focusY = focus.cy;
+			this.animationState.progress = 1;
+			this.animationState.x = projected.x;
+			this.animationState.y = projected.y;
+			this.animationState.appliedScale = projected.scale;
+			this.animationState.isCropActive = true;
+			this.prevAnimationTimeMs = timeMs;
+			this.smoothedAutoFocus = null;
+			this.prevTargetProgress = 1;
+			return Math.max(
+				Math.abs(projected.scale - prevScale),
+				Math.abs(projected.x - prevX) / Math.max(1, this.layoutCache.stageSize.width),
+				Math.abs(projected.y - prevY) / Math.max(1, this.layoutCache.stageSize.height),
+			);
+		}
+		this.animationState.isCropActive = false;
+
 		const { region, strength, blendedScale, transition } = findDominantRegion(
 			this.config.zoomRegions,
 			timeMs,
@@ -578,7 +623,7 @@ export class FrameRenderer {
 		let targetProgress = 0;
 
 		if (region && strength > 0) {
-			const zoomScale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
+			const zoomScale = blendedScale ?? getRegionZoomScale(region);
 			const regionFocus = this.clampFocusToStage(region.focus, region.depth);
 
 			targetScaleFactor = zoomScale;
@@ -815,7 +860,7 @@ export class FrameRenderer {
 			const shape = webcamRect.maskShape ?? this.config.webcamMaskShape ?? "rectangle";
 			ctx.save();
 			const shrink = computeWebcamZoomShrink({
-				zoomProgress: this.animationState.progress,
+				zoomProgress: this.animationState.isCropActive ? 0 : this.animationState.progress,
 				layoutPreset: this.config.webcamLayoutPreset,
 				webcamRect,
 				stageSize: { width: w, height: h },

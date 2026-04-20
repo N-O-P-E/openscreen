@@ -1,5 +1,5 @@
 import type { CursorTelemetryPoint, ZoomFocus, ZoomRegion } from "../types";
-import { ZOOM_DEPTH_SCALES } from "../types";
+import { getRegionZoomScale } from "../types";
 import { TRANSITION_WINDOW_MS, ZOOM_IN_TRANSITION_WINDOW_MS } from "./constants";
 import { interpolateCursorAt } from "./cursorFollowUtils";
 import { clampFocusToScale } from "./focusUtils";
@@ -155,7 +155,7 @@ function getActiveRegion(
 	}
 
 	const activeRegion = activeRegions[0].region;
-	const activeScale = ZOOM_DEPTH_SCALES[activeRegion.depth];
+	const activeScale = getRegionZoomScale(activeRegion);
 
 	return {
 		region: {
@@ -175,7 +175,7 @@ function getConnectedRegionHold(
 ) {
 	for (const pair of connectedPairs) {
 		if (timeMs > pair.transitionEnd && timeMs < pair.nextRegion.startMs) {
-			const nextScale = ZOOM_DEPTH_SCALES[pair.nextRegion.depth];
+			const nextScale = getRegionZoomScale(pair.nextRegion);
 			return {
 				region: {
 					...pair.nextRegion,
@@ -212,8 +212,8 @@ function getConnectedRegionTransition(
 		const transitionProgress = easeConnectedPan(
 			clamp01((timeMs - transitionStart) / Math.max(1, transitionEnd - transitionStart)),
 		);
-		const currentScale = ZOOM_DEPTH_SCALES[currentRegion.depth];
-		const nextScale = ZOOM_DEPTH_SCALES[nextRegion.depth];
+		const currentScale = getRegionZoomScale(currentRegion);
+		const nextScale = getRegionZoomScale(nextRegion);
 		const transitionScale = lerp(currentScale, nextScale, transitionProgress);
 		// Both regions share the same timeMs, so interpolate cursor once and reuse.
 		const sharedCursorFocus =

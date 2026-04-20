@@ -4,6 +4,7 @@ import type {
 	AudioRegion,
 	CropRegion,
 	SpeedRegion,
+	TimedCropRegion,
 	TrimRegion,
 	WebcamKeyframe,
 	WebcamLayoutPreset,
@@ -25,6 +26,7 @@ import type { AspectRatio } from "@/utils/aspectRatioUtils";
 // selection change would feel surprising to the user).
 export interface EditorState {
 	zoomRegions: ZoomRegion[];
+	cropRegions: TimedCropRegion[];
 	trimRegions: TrimRegion[];
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
@@ -46,6 +48,7 @@ export interface EditorState {
 
 export const INITIAL_EDITOR_STATE: EditorState = {
 	zoomRegions: [],
+	cropRegions: [],
 	trimRegions: [],
 	speedRegions: [],
 	annotationRegions: [],

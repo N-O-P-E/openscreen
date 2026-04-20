@@ -3,6 +3,7 @@ import type {
 	AnnotationRegion,
 	CropRegion,
 	SpeedRegion,
+	TimedCropRegion,
 	TrimRegion,
 	WebcamKeyframe,
 	WebcamLayoutPreset,
@@ -32,6 +33,7 @@ interface GifExporterConfig {
 	sizePreset: GifSizePreset;
 	wallpaper: string;
 	zoomRegions: ZoomRegion[];
+	cropRegions?: TimedCropRegion[];
 	trimRegions?: TrimRegion[];
 	speedRegions?: SpeedRegion[];
 	showShadow: boolean;
@@ -136,6 +138,7 @@ export class GifExporter {
 				height: this.config.height,
 				wallpaper: this.config.wallpaper,
 				zoomRegions: this.config.zoomRegions,
+				cropRegions: this.config.cropRegions,
 				showShadow: this.config.showShadow,
 				shadowIntensity: this.config.shadowIntensity,
 				showBlur: this.config.showBlur,

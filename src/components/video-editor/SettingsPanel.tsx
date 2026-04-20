@@ -54,6 +54,7 @@ import type {
 	CropRegion,
 	FigureData,
 	PlaybackSpeed,
+	TimedCropRegion,
 	WebcamLayoutPreset,
 	WebcamMaskShape,
 	WebcamSizePreset,
@@ -63,7 +64,9 @@ import type {
 import {
 	DEFAULT_WEBCAM_SIZE_PRESET,
 	MAX_AUDIO_VOLUME,
+	MAX_CUSTOM_ZOOM_SCALE,
 	MAX_PLAYBACK_SPEED,
+	MIN_CUSTOM_ZOOM_SCALE,
 	SPEED_OPTIONS,
 } from "./types";
 
@@ -130,6 +133,66 @@ function CustomSpeedInput({
 	);
 }
 
+function CustomZoomInput({
+	value,
+	onChange,
+	disabled,
+}: {
+	value: number | null;
+	onChange: (val: number) => void;
+	disabled: boolean;
+}) {
+	const [draft, setDraft] = useState(value != null ? String(value) : "");
+	const [isFocused, setIsFocused] = useState(false);
+
+	const prevValue = useRef(value);
+	if (!isFocused && prevValue.current !== value) {
+		prevValue.current = value;
+		setDraft(value != null ? String(value) : "");
+	}
+
+	const commit = useCallback(
+		(raw: string) => {
+			const num = Number(raw);
+			if (!Number.isFinite(num)) return;
+			const clamped = Math.min(MAX_CUSTOM_ZOOM_SCALE, Math.max(MIN_CUSTOM_ZOOM_SCALE, num));
+			onChange(clamped);
+			setDraft(String(clamped));
+		},
+		[onChange],
+	);
+
+	return (
+		<div className="flex items-center gap-1">
+			<input
+				type="text"
+				inputMode="decimal"
+				placeholder="1.10"
+				disabled={disabled}
+				value={draft}
+				onFocus={() => setIsFocused(true)}
+				onChange={(e) => {
+					const cleaned = e.target.value.replace(/[^0-9.]/g, "");
+					setDraft(cleaned);
+				}}
+				onBlur={() => {
+					setIsFocused(false);
+					if (draft.trim() === "") {
+						setDraft(value != null ? String(value) : "");
+						return;
+					}
+					commit(draft);
+				}}
+				onKeyDown={(e) => {
+					if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+				}}
+				className="w-14 bg-white/5 border border-white/10 rounded-md px-1 py-0.5 text-[11px] font-semibold text-[#34B27B] text-center focus:outline-none focus:border-[#34B27B]/40 disabled:opacity-40"
+			/>
+			<span className="text-[11px] font-semibold text-slate-500">×</span>
+		</div>
+	);
+}
+
 const WALLPAPER_COUNT = 18;
 const WALLPAPER_RELATIVE = Array.from(
 	{ length: WALLPAPER_COUNT },
@@ -167,6 +230,8 @@ interface SettingsPanelProps {
 	onWallpaperChange: (path: string) => void;
 	selectedZoomDepth?: ZoomDepth | null;
 	onZoomDepthChange?: (depth: ZoomDepth) => void;
+	selectedZoomCustomScale?: number | null;
+	onZoomCustomScaleChange?: (scale: number) => void;
 	selectedZoomFocusMode?: ZoomFocusMode | null;
 	onZoomFocusModeChange?: (mode: ZoomFocusMode) => void;
 	hasCursorTelemetry?: boolean;
@@ -190,6 +255,12 @@ interface SettingsPanelProps {
 	onPaddingCommit?: () => void;
 	cropRegion?: CropRegion;
 	onCropChange?: (region: CropRegion) => void;
+	selectedTimedCrop?: TimedCropRegion | null;
+	onTimedCropBoundsChange?: (
+		id: string,
+		bounds: { x: number; y: number; width: number; height: number },
+	) => void;
+	onTimedCropDelete?: (id: string) => void;
 	aspectRatio: AspectRatio;
 	videoElement?: HTMLVideoElement | null;
 	exportQuality?: ExportQuality;
@@ -258,6 +329,8 @@ export function SettingsPanel({
 	onWallpaperChange,
 	selectedZoomDepth,
 	onZoomDepthChange,
+	selectedZoomCustomScale,
+	onZoomCustomScaleChange,
 	selectedZoomFocusMode,
 	onZoomFocusModeChange,
 	hasCursorTelemetry = false,
@@ -281,6 +354,9 @@ export function SettingsPanel({
 	onPaddingCommit,
 	cropRegion,
 	onCropChange,
+	selectedTimedCrop = null,
+	onTimedCropBoundsChange,
+	onTimedCropDelete,
 	aspectRatio,
 	videoElement,
 	exportQuality = "good",
@@ -591,13 +667,72 @@ export function SettingsPanel({
 	return (
 		<div className="flex-[2] min-w-0 bg-[#09090b] border border-white/5 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 			<div className="flex-1 overflow-y-auto custom-scrollbar p-4 pb-0">
+				{selectedTimedCrop && onTimedCropBoundsChange && (
+					<div className="mb-4 p-3 rounded-xl bg-[#14b8a6]/5 border border-[#14b8a6]/20 space-y-3">
+						<div className="flex items-center justify-between">
+							<span className="text-xs font-semibold text-[#14b8a6]">{t("crop.timedTitle")}</span>
+							<span className="text-[10px] text-slate-500 font-mono">
+								{Math.round(selectedTimedCrop.startMs)} – {Math.round(selectedTimedCrop.endMs)} ms
+							</span>
+						</div>
+						<div className="grid grid-cols-4 gap-2">
+							{[
+								{ label: "X", field: "x" as const, max: 1 - selectedTimedCrop.width },
+								{ label: "Y", field: "y" as const, max: 1 - selectedTimedCrop.height },
+								{ label: "W", field: "width" as const, max: 1 - selectedTimedCrop.x },
+								{ label: "H", field: "height" as const, max: 1 - selectedTimedCrop.y },
+							].map(({ label, field, max }) => (
+								<div key={field} className="flex flex-col gap-1">
+									<label className="text-[9px] font-medium text-slate-400 uppercase tracking-wider text-center">
+										{label}
+									</label>
+									<input
+										type="number"
+										min={field === "x" || field === "y" ? 0 : 0.01}
+										max={max}
+										step={0.01}
+										value={Number(selectedTimedCrop[field].toFixed(2))}
+										onChange={(e) => {
+											const n = Number(e.target.value);
+											if (!Number.isFinite(n)) return;
+											const next = {
+												x: selectedTimedCrop.x,
+												y: selectedTimedCrop.y,
+												width: selectedTimedCrop.width,
+												height: selectedTimedCrop.height,
+												[field]: n,
+											};
+											onTimedCropBoundsChange(selectedTimedCrop.id, next);
+										}}
+										className="h-7 rounded-md border border-white/10 bg-white/5 px-2 text-[11px] text-slate-200 outline-none focus:border-[#14b8a6]/50 focus:ring-1 focus:ring-[#14b8a6]/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none text-center"
+									/>
+								</div>
+							))}
+						</div>
+						<p className="text-[10px] text-slate-500">{t("crop.timedHint")}</p>
+						{onTimedCropDelete && (
+							<Button
+								onClick={() => onTimedCropDelete(selectedTimedCrop.id)}
+								variant="destructive"
+								size="sm"
+								className="w-full gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/30 transition-all h-8 text-xs"
+							>
+								<Trash2 className="w-3 h-3" />
+								{t("crop.deleteTimed")}
+							</Button>
+						)}
+					</div>
+				)}
+
 				<div className="mb-4">
 					<div className="flex items-center justify-between mb-3">
 						<span className="text-sm font-medium text-slate-200">{t("zoom.level")}</span>
 						<div className="flex items-center gap-2">
 							{zoomEnabled && selectedZoomDepth && (
 								<span className="text-[10px] uppercase tracking-wider font-medium text-[#34B27B] bg-[#34B27B]/10 px-2 py-0.5 rounded-full">
-									{ZOOM_DEPTH_OPTIONS.find((o) => o.depth === selectedZoomDepth)?.label}
+									{selectedZoomCustomScale != null
+										? `${selectedZoomCustomScale}×`
+										: ZOOM_DEPTH_OPTIONS.find((o) => o.depth === selectedZoomDepth)?.label}
 								</span>
 							)}
 							<KeyboardShortcutsHelp />
@@ -605,7 +740,8 @@ export function SettingsPanel({
 					</div>
 					<div className="grid grid-cols-6 gap-1.5">
 						{ZOOM_DEPTH_OPTIONS.map((option) => {
-							const isActive = selectedZoomDepth === option.depth;
+							const isActive =
+								selectedZoomDepth === option.depth && selectedZoomCustomScale == null;
 							return (
 								<Button
 									key={option.depth}
@@ -625,6 +761,25 @@ export function SettingsPanel({
 								</Button>
 							);
 						})}
+					</div>
+					<div className="mt-2 flex items-center justify-between">
+						<span
+							className={cn(
+								"text-[11px]",
+								zoomEnabled
+									? selectedZoomCustomScale != null
+										? "text-[#34B27B]"
+										: "text-slate-500"
+									: "text-slate-600",
+							)}
+						>
+							{t("zoom.customScale")}
+						</span>
+						<CustomZoomInput
+							value={zoomEnabled ? (selectedZoomCustomScale ?? null) : null}
+							onChange={(val) => onZoomCustomScaleChange?.(val)}
+							disabled={!zoomEnabled}
+						/>
 					</div>
 					{!zoomEnabled && (
 						<p className="text-[10px] text-slate-500 mt-2 text-center">{t("zoom.selectRegion")}</p>
