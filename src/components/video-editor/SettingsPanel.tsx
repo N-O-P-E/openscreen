@@ -447,6 +447,13 @@ export function SettingsPanel({
 	const cropSnapshotRef = useRef<CropRegion | null>(null);
 	const [cropAspectLocked, setCropAspectLocked] = useState(false);
 	const [cropAspectRatio, setCropAspectRatio] = useState("");
+	const [showTimedCropModal, setShowTimedCropModal] = useState(false);
+	const timedCropSnapshotRef = useRef<{
+		x: number;
+		y: number;
+		width: number;
+		height: number;
+	} | null>(null);
 
 	const videoWidth = videoElement?.videoWidth || 1920;
 	const videoHeight = videoElement?.videoHeight || 1080;
@@ -710,6 +717,23 @@ export function SettingsPanel({
 							))}
 						</div>
 						<p className="text-[10px] text-slate-500">{t("crop.timedHint")}</p>
+						<Button
+							onClick={() => {
+								timedCropSnapshotRef.current = {
+									x: selectedTimedCrop.x,
+									y: selectedTimedCrop.y,
+									width: selectedTimedCrop.width,
+									height: selectedTimedCrop.height,
+								};
+								setShowTimedCropModal(true);
+							}}
+							variant="outline"
+							size="sm"
+							className="w-full gap-1.5 bg-white/5 text-slate-200 border-white/10 hover:bg-white/10 hover:border-white/20 hover:text-white text-[10px] h-8 transition-all"
+						>
+							<Crop className="w-3 h-3" />
+							{t("crop.editVisually")}
+						</Button>
 						{onTimedCropDelete && (
 							<Button
 								onClick={() => onTimedCropDelete(selectedTimedCrop.id)}
@@ -1409,6 +1433,61 @@ export function SettingsPanel({
 					</AccordionItem>
 				</Accordion>
 			</div>
+
+			{showTimedCropModal && selectedTimedCrop && onTimedCropBoundsChange && (
+				<>
+					<div
+						className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 animate-in fade-in duration-200"
+						onClick={() => {
+							if (timedCropSnapshotRef.current && selectedTimedCrop) {
+								onTimedCropBoundsChange(selectedTimedCrop.id, timedCropSnapshotRef.current);
+							}
+							setShowTimedCropModal(false);
+						}}
+					/>
+					<div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[60] bg-[#09090b] rounded-2xl shadow-2xl border border-white/10 p-8 w-[90vw] max-w-5xl max-h-[90vh] overflow-auto animate-in zoom-in-95 duration-200">
+						<div className="flex items-center justify-between mb-6">
+							<div>
+								<span className="text-xl font-bold text-slate-200">{t("crop.timedTitle")}</span>
+								<p className="text-sm text-slate-400 mt-2">{t("crop.dragInstruction")}</p>
+							</div>
+							<Button
+								variant="ghost"
+								size="icon"
+								onClick={() => {
+									if (timedCropSnapshotRef.current && selectedTimedCrop) {
+										onTimedCropBoundsChange(selectedTimedCrop.id, timedCropSnapshotRef.current);
+									}
+									setShowTimedCropModal(false);
+								}}
+								className="hover:bg-white/10 text-slate-400 hover:text-white"
+							>
+								<X className="w-5 h-5" />
+							</Button>
+						</div>
+						<CropControl
+							videoElement={videoElement || null}
+							cropRegion={{
+								x: selectedTimedCrop.x,
+								y: selectedTimedCrop.y,
+								width: selectedTimedCrop.width,
+								height: selectedTimedCrop.height,
+							}}
+							onCropChange={(region) => onTimedCropBoundsChange(selectedTimedCrop.id, region)}
+							aspectRatio={aspectRatio}
+						/>
+						<div className="mt-6 flex justify-end">
+							<Button
+								onClick={() => setShowTimedCropModal(false)}
+								size="lg"
+								className="bg-[#14b8a6] hover:bg-[#14b8a6]/90 text-white"
+							>
+								{t("crop.done")}
+							</Button>
+						</div>
+					</div>
+				</>
+			)}
 
 			{showCropModal && cropRegion && onCropChange && (
 				<>
